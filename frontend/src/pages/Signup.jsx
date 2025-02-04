@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 function Signup() {
 	const googleAuth = () => {
 		window.open(
-			`${import.meta.env.VITE_BACKEND_URL}/auth/google/callback`,
+			`${import.meta.env.VITE_BACKEND_URL}/auth/google`,
 			"_self"
 		);
 	};

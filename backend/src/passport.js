@@ -33,15 +33,23 @@ passport.use(
 )
 )
 
-passport.serializeUser((user , done)=>{
-    done(null , user.id);
-})
+passport.serializeUser((user, done) => {
+    console.log("Serializing user ID:", user.id);
+    done(null, user.id); // Store the user ID in the session
+  });
 
-passport.deserializeUser(async(id , done) =>{
-   try {
-    const user = await User.findById(id);
-    done(null, user);
-   } catch (error) {
-    done(error, null);
-   }
-})
+  passport.deserializeUser(async (id, done) => {
+    console.log("Deserializing user ID:", id);
+    try {
+      const user = await User.findById(id);
+      if (!user) {
+        console.log("User not found in database");
+        return done(new Error("User not found"), null);
+      }
+      console.log("Deserialized user:", user);
+      done(null, user);
+    } catch (err) {
+      console.error("Deserialization error:", err);
+      done(err, null);
+    }
+  });

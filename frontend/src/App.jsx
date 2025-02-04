@@ -14,7 +14,10 @@ function App() {
 		try {
 			const url = `${import.meta.env.VITE_BACKEND_URL}/auth/login/success`;
 			const { data } = await axios.get(url, { withCredentials: true });
-			setUser(data.user._json);
+
+console.log("User Data in the frontend " , data.user)
+
+			setUser(data.user);
 		} catch (err) {
 			console.log(err);
 		}
