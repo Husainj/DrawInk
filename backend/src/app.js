@@ -4,7 +4,7 @@ import session from "express-session";
 import passport from "passport"
 import "./passport.js"
 import authRouter from "./routes/auth.routes.js"
-
+import userRouter from "./routes/user.routes.js"
 
 const app = express()
 
@@ -40,6 +40,6 @@ app.use((req, res, next) => {
 app.use(express.json({limit:"50mb"}))
 
 app.use("/auth" , authRouter )
-
+app.use("/api/v1/users" , userRouter)
 
 export {app}
