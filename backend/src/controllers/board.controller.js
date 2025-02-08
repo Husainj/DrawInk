@@ -91,4 +91,4 @@ const deleteBoard = asyncHandler(async(req, res)=>{
     )
 })
 
-export {createBoard , getBoardsOfUser , getBoardDetails , deleteBoard , joinBoard}
+export {createBoard , getBoardsOfUser , getBoardDetails , deleteBoard , joinBoard ,getBoardElements}
