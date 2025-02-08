@@ -6,6 +6,7 @@ import "./passport.js"
 import authRouter from "./routes/auth.routes.js"
 import userRouter from "./routes/user.routes.js"
 import boardsRouter from "./routes/board.routes.js"
+import elementRouter from "./routes/element.routes.js"
 const app = express()
 
 app.use(cors({
@@ -42,5 +43,6 @@ app.use(express.json({limit:"50mb"}))
 app.use("/auth" , authRouter )
 app.use("/api/v1/users" , userRouter)
 app.use("/api/v1/boards" , boardsRouter)
+app.use("/api/v1/elements" , elementRouter)
 
 export {app}
