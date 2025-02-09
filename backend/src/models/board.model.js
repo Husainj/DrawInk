@@ -1,7 +1,10 @@
 import mongoose, { Schema } from "mongoose";
 
 const boardSchema = new Schema({
-
+    boardname : {
+        type: String,
+        required : true,
+    },
     code : {
         type : String,
         unique : true,

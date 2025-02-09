@@ -5,10 +5,13 @@ import { apiResponse } from "../utils/apiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {nanoid} from "nanoid"
 
-const createBoard = asyncHandler( async(req,res) => {
+const createBoard = asyncHandler( async(req,res) => { 
+    const {boardname} = req.body
+
     const boardCode = nanoid(6) 
 
     const newBoard = await Board.create({
+        boardname : boardname,
         code : boardCode,
         owner : req.user._id,
         participants : [req.user._id],
