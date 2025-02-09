@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Search, Bell, Menu, Settings, Layout, Users, X } from 'lucide-react';
-
+import { useDispatch, useSelector } from 'react-redux';
 import Header from "../components/Header";
 import Sidebar from "../components/Sidebar"
 import SpaceList from "../components/SpaceList"
@@ -12,6 +12,8 @@ const Dashboard = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newSpaceName, setNewSpaceName] = useState('');
+  const user = useSelector((state) => state.auth.user);
+
 
   const handleCreateSpace = async() => {
     // Here you would typically handle the space creation
@@ -164,8 +166,8 @@ const Dashboard = () => {
                   className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <Bell className="h-5 w-5 text-gray-500" />
-              <div className="h-8 w-8 bg-gray-200 rounded-full"></div>
+              <Bell className="h-5 w-5 text-gray-500" /> 
+              <img src={user.avatar} className="h-8 w-8 bg-gray-200 rounded-full"></img>
             </div>
           </div>
         </header>
