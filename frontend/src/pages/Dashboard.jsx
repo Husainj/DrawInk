@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Search, Bell, Menu, Settings, Layout, Users, X } from 'lucide-react';
 import { useDispatch, useSelector } from 'react-redux';
 import Header from "../components/Header";
@@ -13,7 +13,27 @@ const Dashboard = () => {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newSpaceName, setNewSpaceName] = useState('');
   const user = useSelector((state) => state.auth.user);
-
+  const [spaces, setSpaces] = useState([]);
+//   const spaces = [
+//     { name: 'Project Alpha', id: 'SPACE001', members: 5 },
+//     { name: 'Design Team', id: 'SPACE002', members: 8 },
+//     { name: 'Marketing Campaign', id: 'SPACE003', members: 4 },
+//   ];
+  useEffect(()=>{
+    const fetchSpaces = async()=>{
+        const response = await api.get("/boards/")
+        console.log("User Boards Fetched : " , response.data.data)
+        const formattedSpaces = response.data.data.map((board) => ({
+            name: board.boardname,
+            id: board.code,
+            members: board.participants,
+          }));
+    
+          setSpaces(formattedSpaces);
+    }
+  
+    fetchSpaces();
+  } , [])
 
   const handleCreateSpace = async() => {
     // Here you would typically handle the space creation
@@ -33,11 +53,11 @@ const Dashboard = () => {
    
   };
 
-  const spaces = [
-    { name: 'Project Alpha', id: 'SPACE001', members: 5 },
-    { name: 'Design Team', id: 'SPACE002', members: 8 },
-    { name: 'Marketing Campaign', id: 'SPACE003', members: 4 },
-  ];
+
+
+ 
+
+
 
   const logout = () => {
     window.open(`${import.meta.env.VITE_BACKEND_URL}/auth/logout`, "_self");
@@ -219,9 +239,24 @@ const Dashboard = () => {
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {space.id}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500 text-right">
-                      {space.members}
-                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500 text-right flex -space-x-2">
+                        {Array.isArray(space.members) ? (
+                            space.members.slice(0, 3).map((member, index) => (
+                            <img
+                                key={index}
+                                src={member.avatar} // Ensure 'avatar' exists
+                                alt={member.name || "User"} // Ensure 'name' exists
+                                className="w-8 h-8 rounded-full border border-white"
+                            />
+                            ))
+                        ) : (
+                            <span className="text-gray-500">No members</span>
+                        )}
+                        {Array.isArray(space.members) && space.members.length > 3 && (
+                            <span className="text-xs font-medium text-gray-600">+{space.members.length - 3}</span>
+                        )}
+                        </td>
+
                   </tr>
                 ))}
               </tbody>
