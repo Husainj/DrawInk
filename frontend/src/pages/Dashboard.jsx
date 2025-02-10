@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Search, Bell, Menu, Settings, Layout, Users, X } from 'lucide-react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import Header from "../components/Header";
 import Sidebar from "../components/Sidebar"
 import SpaceList from "../components/SpaceList"
@@ -15,7 +16,7 @@ const Dashboard = () => {
   const user = useSelector((state) => state.auth.user);
   const [spaces, setSpaces] = useState([]);
 
-
+  const navigate = useNavigate();
   useEffect(()=>{
     const fetchSpaces = async()=>{
         const response = await api.get("/boards/")
@@ -42,6 +43,12 @@ const Dashboard = () => {
        
         const response = await api.post('/boards/create' , formData)
         console.log("Response from creation of board : " , response)
+
+        if(response.status === 200){
+            navigate(`/board/${response.data.data._id}`)
+        }
+
+
         setNewSpaceName('');
         setShowCreateDialog(false);
      } catch (error) {
