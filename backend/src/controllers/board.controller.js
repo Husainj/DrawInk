@@ -29,7 +29,12 @@ const getBoardsOfUser = asyncHandler(async(req , res)=>{
     const userId = req.user._id
 
     const boards = await Board.find({owner : userId})
-    
+    .populate("participants" , "name email avatar") ;
+
+    if(!boards){
+        throw new apiError(400 , "No board Found")
+    }
+
     return res.status(200)
     .json(
         new apiResponse(200 , boards , "All boards of this user fetched!")
@@ -39,7 +44,13 @@ const getBoardsOfUser = asyncHandler(async(req , res)=>{
 const getBoardDetails = asyncHandler(async(req, res)=>{
     const { boardId } = req.params
 
-    const board = await Board.findById(boardId);
+    const board = await Board.findById(boardId)
+    .populate("owner" , "name email avatar")
+    .populate("participants" , "name email avatar") ;
+
+    if(!board){
+        throw new apiError(400 , "Board not found");            
+    }
 
     return res.status(200)
     .json(

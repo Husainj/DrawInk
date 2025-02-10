@@ -14,11 +14,8 @@ const Dashboard = () => {
   const [newSpaceName, setNewSpaceName] = useState('');
   const user = useSelector((state) => state.auth.user);
   const [spaces, setSpaces] = useState([]);
-//   const spaces = [
-//     { name: 'Project Alpha', id: 'SPACE001', members: 5 },
-//     { name: 'Design Team', id: 'SPACE002', members: 8 },
-//     { name: 'Marketing Campaign', id: 'SPACE003', members: 4 },
-//   ];
+
+
   useEffect(()=>{
     const fetchSpaces = async()=>{
         const response = await api.get("/boards/")
@@ -239,7 +236,7 @@ const Dashboard = () => {
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {space.id}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500 text-right flex -space-x-2">
+                    <td className="px-6 py-4 text-sm text-gray-500 text-right flex justify-end -space-x-2">
                         {Array.isArray(space.members) ? (
                             space.members.slice(0, 3).map((member, index) => (
                             <img
