@@ -23,11 +23,13 @@ const Dashboard = () => {
         console.log("User Boards Fetched : " , response.data.data)
         const formattedSpaces = response.data.data.map((board) => ({
             name: board.boardname,
-            id: board.code,
+            code: board.code,
             members: board.participants,
+            _id : board._id
           }));
     
           setSpaces(formattedSpaces);
+          console.log("Formatted Space : " , formattedSpaces)
     }
   
     fetchSpaces();
@@ -47,8 +49,7 @@ const Dashboard = () => {
         if(response.status === 200){
             navigate(`/board/${response.data.data._id}`)
         }
-
-
+        
         setNewSpaceName('');
         setShowCreateDialog(false);
      } catch (error) {
@@ -57,6 +58,14 @@ const Dashboard = () => {
    
   };
 
+
+  const handleBoardClick = (boardId) => {
+    try {
+      navigate(`/board/${boardId}`);
+    } catch (error) {
+      console.error("Error fetching board details:", error);
+    }
+  };
 
 
  
@@ -236,12 +245,12 @@ const Dashboard = () => {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {spaces.map((space) => (
-                  <tr key={space.id} className="hover:bg-gray-50">
+                  <tr key={space.code} className="hover:bg-gray-50" onClick={() => handleBoardClick(space._id)}>
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">
                       {space.name}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
-                      {space.id}
+                      {space.code}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500 text-right flex justify-end -space-x-2">
                         {Array.isArray(space.members) ? (
