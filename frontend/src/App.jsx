@@ -6,7 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import { useDispatch } from "react-redux";
 import { setUserInfo } from "./redux/slices/authSlice";
 import BoardPage from "./pages/BoardPage";
-import Test from "./pages/Test";
+
 function App() {
   const [user, setUser] = useState(null);
 
@@ -46,11 +46,7 @@ function App() {
           path="/board/:boardId"
           element={user ? <BoardPage /> : <LandingPage />}
         />
-         <Route
-          exact
-          path="/test"
-          element={<Test />}
-        />
+      
       </Routes>
       
     </div>

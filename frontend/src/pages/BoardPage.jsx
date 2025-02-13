@@ -11,6 +11,7 @@ const BoardPage = () => {
   const [board, setBoard] = useState();
   const [selectedId, setSelectedId] = useState(null);
   const isDrawing = useRef(false);
+  const isErasing = useRef(false);
   const stageRef = useRef(null);
   const transformerRef = useRef(null);
 
@@ -26,7 +27,6 @@ const BoardPage = () => {
     fetchBoardData();
   }, [boardId]);
 
-  // Update transformer when selected shape changes
   useEffect(() => {
     if (selectedId && transformerRef.current) {
       const node = stageRef.current.findOne('#' + selectedId);
@@ -39,7 +39,6 @@ const BoardPage = () => {
 
   const handleMouseDown = (e) => {
     if (tool === "select") {
-      // Clicked on stage - clear selection
       if (e.target === e.target.getStage()) {
         setSelectedId(null);
         return;
@@ -47,15 +46,26 @@ const BoardPage = () => {
       return;
     }
 
+    if (tool === "eraser") {
+      isErasing.current = true;
+      // Get the clicked shape
+      const clickedShape = e.target;
+      if (clickedShape && clickedShape !== e.target.getStage()) {
+        // Delete the shape by filtering it out from the shapes array
+        setShapes(shapes.filter(shape => shape.id !== clickedShape.attrs.id));
+      }
+      return;
+    }
+
     const pos = e.target.getStage().getPointerPosition();
     let newShape;
 
-    if (tool === "pen" || tool === "eraser") {
+    if (tool === "pen") {
       isDrawing.current = true;
       newShape = {
-        type: tool,
+        type: "pen",
         points: [pos.x, pos.y],
-        stroke: tool === "pen" ? "#2D3748" : "#ffffff",
+        stroke: "#2D3748",
         id: Date.now().toString(),
       };
     } else {
@@ -74,6 +84,18 @@ const BoardPage = () => {
   };
 
   const handleMouseMove = (e) => {
+    if (tool === "eraser" && isErasing.current) {
+      // Get all shapes under the current pointer position
+      const pos = e.target.getStage().getPointerPosition();
+      const shape = e.target.getStage().getIntersection(pos);
+      
+      if (shape && shape !== e.target.getStage()) {
+        // Delete the shape that the eraser is hovering over
+        setShapes(prevShapes => prevShapes.filter(s => s.id !== shape.attrs.id));
+      }
+      return;
+    }
+
     if (!isDrawing.current) return;
     const point = e.target.getStage().getPointerPosition();
     setShapes((prev) =>
@@ -85,14 +107,15 @@ const BoardPage = () => {
 
   const handleMouseUp = () => {
     isDrawing.current = false;
+    isErasing.current = false;
   };
 
+  // Rest of the code remains the same...
   const handleTransformEnd = (e) => {
     const node = e.target;
     const scaleX = node.scaleX();
     const scaleY = node.scaleY();
 
-    // Reset scale to 1 and adjust width/height/radius instead
     node.scaleX(1);
     node.scaleY(1);
 
@@ -156,6 +179,7 @@ const BoardPage = () => {
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
           className="bg-white shadow-lg rounded-lg border border-gray-300"
         >
           <Layer>
@@ -201,13 +225,13 @@ const BoardPage = () => {
                     fill={shape.fill}
                   />
                 );
-              } else if (shape.type === "pen" || shape.type === "eraser") {
+              } else if (shape.type === "pen") {
                 return (
                   <Line
-                    key={shape.id}
+                    {...shapeProps}
                     points={shape.points}
                     stroke={shape.stroke}
-                    strokeWidth={shape.type === "eraser" ? 10 : 2}
+                    strokeWidth={2}
                     tension={0.5}
                     lineCap="round"
                   />
@@ -215,11 +239,10 @@ const BoardPage = () => {
               }
               return null;
             })}
-            {selectedId && (
+            {selectedId && tool === "select" && (
               <Transformer
                 ref={transformerRef}
                 boundBoxFunc={(oldBox, newBox) => {
-                  // Limit resize
                   const minSize = 5;
                   const maxSize = 800;
                   if (
