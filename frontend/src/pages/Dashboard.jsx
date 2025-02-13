@@ -7,12 +7,16 @@ import Sidebar from "../components/Sidebar"
 import SpaceList from "../components/SpaceList"
 import CreateSpaceDialog from '../components/CreateSpaceDialog';
 import api from '../services/api';
+
+
+
 const Dashboard = () => {
   const [isOpen, setIsOpen] = useState(true);
   const [spaceCode, setSpaceCode] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newSpaceName, setNewSpaceName] = useState('');
+
   const user = useSelector((state) => state.auth.user);
   const [spaces, setSpaces] = useState([]);
 
@@ -34,6 +38,8 @@ const Dashboard = () => {
   
     fetchSpaces();
   } , [])
+
+ 
 
   const handleCreateSpace = async() => {
     // Here you would typically handle the space creation
@@ -68,6 +74,20 @@ const Dashboard = () => {
   };
 
 
+  const joinBoard = async() =>{
+    try {
+      const formData = new FormData();
+      formData.append('code', spaceCode);
+      const response = await api.post("/boards/join" , formData)
+
+      console.log("Response of joining Board : " , response)
+
+      navigate(`/board/${response.data.data._id}`)
+
+    } catch (error) {
+      console.log("Error while joining board in frontend : " , error)
+    }
+  }
  
 
 
@@ -222,7 +242,7 @@ const Dashboard = () => {
                 onChange={(e) => setSpaceCode(e.target.value)}
                 className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 whitespace-nowrap">
+              <button onClick={()=>joinBoard()} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 whitespace-nowrap">
                 Join Space
               </button>
             </div>

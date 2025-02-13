@@ -3,6 +3,9 @@ import { Stage, Layer, Rect, Circle, Line, RegularPolygon, Transformer } from "r
 import { FaSquare, FaCircle, FaPlay, FaPen, FaEraser, FaShareAlt, FaMousePointer } from "react-icons/fa";
 import { useParams } from "react-router-dom";
 import api from "../services/api.js";
+import io from "socket.io-client";
+
+const socket = io("http://localhost:8000");
 
 const BoardPage = () => {
   const { boardId } = useParams();
@@ -10,12 +13,16 @@ const BoardPage = () => {
   const [shapes, setShapes] = useState([]);
   const [board, setBoard] = useState();
   const [selectedId, setSelectedId] = useState(null);
+  const [participants, setParticipants] = useState([]);
   const isDrawing = useRef(false);
   const isErasing = useRef(false);
   const stageRef = useRef(null);
   const transformerRef = useRef(null);
 
   useEffect(() => {
+
+
+
     const fetchBoardData = async () => {
       try {
         const response = await api.get(`/boards/${boardId}`);
@@ -25,6 +32,19 @@ const BoardPage = () => {
       }
     };
     fetchBoardData();
+
+    socket.emit("joinBoard", boardId);
+
+    // Listen for userJoined events
+    socket.on("userJoined", (data) => {
+      console.log("User joined:", data.userId);
+      setParticipants(data.participants); // Update the participants list
+    });
+
+    return () => {
+      // Clean up event listeners
+      socket.off("userJoined");
+    };
   }, [boardId]);
 
   useEffect(() => {
@@ -169,6 +189,14 @@ const BoardPage = () => {
         <button className="flex items-center gap-2 px-4 py-2 text-white bg-blue-500 rounded-lg hover:bg-blue-600">
           <FaShareAlt /> Share
         </button>
+        <div>
+      <h1>Board Participants</h1>
+      <ul>
+        {participants.map((participant) => (
+          <li key={participant}>{participant}</li>
+        ))}
+      </ul>
+    </div>
       </div>
 
       <div className="flex-1 flex justify-center items-center p-4">

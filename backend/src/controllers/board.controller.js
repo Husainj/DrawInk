@@ -5,6 +5,8 @@ import { apiResponse } from "../utils/apiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {nanoid} from "nanoid"
 
+
+
 const createBoard = asyncHandler( async(req,res) => { 
     const {boardname} = req.body
 
@@ -72,6 +74,13 @@ const joinBoard = asyncHandler(async(req, res)=>{
         board.participants.push(userId);
         await board.save();
     }
+
+    const io = req.io;
+    io.to(board._id.toString()).emit("userJoined" , {
+        userId,
+        boardId : board._id,
+        participants : board.participants
+    })
 
     return res.status(200)
     .json(
