@@ -19,6 +19,13 @@ const createBoard = asyncHandler( async(req,res) => {
         participants : [req.user._id],
     })
 
+    const io = req.io;
+    io.to(newBoard._id.toString()).emit("userJoined" , {
+        userId : req.user._id,
+        boardId : newBoard._id,
+        participants : newBoard.participants
+    })
+
     return res
     .status(200)
     .json(

@@ -17,7 +17,7 @@ function App() {
       const { data } = await axios.get(url, { withCredentials: true });
       const { id, name, email, avatar } = data.user;
       console.log("User Data in the frontend ", data.user);
-      dispatch(setUserInfo({ id, name, email, avatar }));
+      dispatch(setUserInfo({ _id : id, name, email, avatar }));
       setUser(data.user);
     } catch (err) {
       console.log(err);

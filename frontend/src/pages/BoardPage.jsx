@@ -4,8 +4,8 @@ import { FaSquare, FaCircle, FaPlay, FaPen, FaEraser, FaShareAlt, FaMousePointer
 import { useParams } from "react-router-dom";
 import api from "../services/api.js";
 import io from "socket.io-client";
+import { useSelector } from "react-redux";
 
-const socket = io("http://localhost:8000");
 
 const BoardPage = () => {
   const { boardId } = useParams();
@@ -18,11 +18,16 @@ const BoardPage = () => {
   const isErasing = useRef(false);
   const stageRef = useRef(null);
   const transformerRef = useRef(null);
+  const user = useSelector((state) => state.auth.user);
+
+
+  const socket = io("http://localhost:8000" , {
+    auth : {
+      userId : user._id, 
+    }
+  });
 
   useEffect(() => {
-
-
-
     const fetchBoardData = async () => {
       try {
         const response = await api.get(`/boards/${boardId}`);
@@ -41,11 +46,20 @@ const BoardPage = () => {
       setParticipants(data.participants); // Update the participants list
     });
 
+    // const handleBeforeUnload = () => {
+    //   socket.emit("leaveBoard", { boardId, userId: user._id });
+    // };
+
+    // window.addEventListener("beforeunload", handleBeforeUnload);
+
+
     return () => {
       // Clean up event listeners
+      // window.removeEventListener("beforeunload", handleBeforeUnload);
       socket.off("userJoined");
+      // socket.disconnect();
     };
-  }, [boardId]);
+  }, [boardId , user._id]);
 
   useEffect(() => {
     if (selectedId && transformerRef.current) {

@@ -65,9 +65,17 @@ const Dashboard = () => {
   };
 
 
-  const handleBoardClick = (boardId) => {
+  const handleBoardClick = async(code) => {
     try {
-      navigate(`/board/${boardId}`);
+      // navigate(`/board/${boardId}`);
+      const formData = new FormData();
+      formData.append('code' , code);
+
+      const response = await api.post("/boards/join" , formData)
+
+      console.log("Response of joining Board : " , response)
+
+      navigate(`/board/${response.data.data._id}`)
     } catch (error) {
       console.error("Error fetching board details:", error);
     }
@@ -265,7 +273,7 @@ const Dashboard = () => {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {spaces.map((space) => (
-                  <tr key={space.code} className="hover:bg-gray-50" onClick={() => handleBoardClick(space._id)}>
+                  <tr key={space.code} className="hover:bg-gray-50" onClick={() => handleBoardClick(space.code)}>
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">
                       {space.name}
                     </td>
