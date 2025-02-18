@@ -1,28 +1,61 @@
 const userRoomMap = new Map();
 import { Board } from "../models/board.model.js";
+import { Element } from "../models/elements.model.js";
 export const setupSocket = (io) => {
   io.on("connection", (socket) => {
     const userId = socket.handshake.auth.userId;
     console.log(`User connected: ${userId}`);
 
     // Join a board room
-    socket.on("joinBoard", (boardId) => {
+    socket.on("joinBoard", async(boardId) => {
       socket.join(boardId);
       console.log(`User joined board: ${boardId}`);
 
       userRoomMap.set(socket.id, { userId, boardId });
+
+      try {
+        const shapes = await Element.find({ boardId });
+        socket.emit("initialShapes", shapes); // Send existing shapes to the user
+      } catch (error) {
+        console.error("Error fetching shapes:", error);
+      }
     });
 
     // Handle adding new element
-    socket.on("addElement", (data) => {
-      const { boardId, element } = data;
-      io.to(boardId).emit("elementAdded", element);
+    socket.on("addElement", async(data) => {
+      const { boardId, newShape } = data;
+      console.log("BOARD ID IN ADD SHAPE : " , boardId)
+      console.log("ELEMENT REACHED IN ADD ELEMENT : " , newShape)
+      newShape["boardId"] = boardId
+      newShape["sId"] = newShape.id
+      try {
+        const ElementRes = new Element(newShape );
+        await ElementRes.save();
+
+        console.log("ADDED ELEMENT RESPONSE!! :: " , ElementRes)
+        io.to(boardId).emit("elementAdded", ElementRes); // Broadcast to all users
+      } catch (error) {
+        console.error("Error adding shape:", error);
+      }
+
+     
     });
 
     // Handle element updates
-    socket.on("updateElement", (data) => {
-      const { boardId, element } = data;
-      io.to(boardId).emit("elementUpdated", element);
+    socket.on("updateElement", async(data) => {
+      const { boardId, updatedShape } = data;
+      try {
+        const updatedShapeRes = await Element.findOneAndUpdate(
+          { sId: updatedShape.id },
+          updatedShape,
+          { new: true }
+        );
+
+        console.log("UPDATED ELEMENT RESPONSE!! :: " , updatedShapeRes)
+        io.to(boardId).emit("elementUpdated", updatedShapeRes); // Broadcast to all users
+      } catch (error) {
+        console.error("Error updating shape:", error);
+      }
     });
 
     // Handle element deletion

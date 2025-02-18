@@ -52,11 +52,17 @@ const BoardPage = () => {
 
     // window.addEventListener("beforeunload", handleBeforeUnload);
 
+    socket.on("initialShapes", (shapes) => {
+      setShapes(shapes); // Set the initial shapes
+    });
+
+
 
     return () => {
       // Clean up event listeners
       // window.removeEventListener("beforeunload", handleBeforeUnload);
       socket.off("userJoined");
+      socket.off("initialShapes");
       // socket.disconnect();
     };
   }, [boardId , user._id]);
@@ -70,6 +76,18 @@ const BoardPage = () => {
       }
     }
   }, [selectedId]);
+
+  useEffect(()=>{
+    socket.on("elementAdded", (shape) => {
+      setShapes((prev) => [...prev, shape]);
+    })
+
+    socket.on("elementUpdated", (element) => {
+      setShapes((prev) =>
+        prev.map((s) => (s.id === element.id ? element : s))
+      );
+    });
+  } , [])
 
   const handleMouseDown = (e) => {
     if (tool === "select") {
@@ -114,7 +132,9 @@ const BoardPage = () => {
       else if (tool === "circle") newShape = { ...shapeProps, type: "circle", radius: 30 };
       else if (tool === "triangle") newShape = { ...shapeProps, type: "triangle", radius: 50 };
     }
+    socket.emit("addElement", { boardId , newShape });
     setShapes((prev) => [...prev, newShape]);
+    console.log("SHAPES ON BOARD PAGE : " , shapes)
   };
 
   const handleMouseMove = (e) => {
@@ -144,7 +164,6 @@ const BoardPage = () => {
     isErasing.current = false;
   };
 
-  // Rest of the code remains the same...
   const handleTransformEnd = (e) => {
     const node = e.target;
     const scaleX = node.scaleX();
@@ -153,17 +172,19 @@ const BoardPage = () => {
     node.scaleX(1);
     node.scaleY(1);
 
-    setShapes(shapes.map(shape => {
+    let updatedShape = null;
+
+    const updatedShapes = shapes.map(shape => {
       if (shape.id === node.id()) {
         if (shape.type === "circle") {
-          return {
+          updatedShape = {
             ...shape,
             radius: shape.radius * scaleX,
             x: node.x(),
             y: node.y(),
           };
         } else if (shape.type === "square") {
-          return {
+          updatedShape = {
             ...shape,
             width: node.width() * scaleX,
             height: node.height() * scaleY,
@@ -171,29 +192,36 @@ const BoardPage = () => {
             y: node.y(),
           };
         } else if (shape.type === "triangle") {
-          return {
+          updatedShape = {
             ...shape,
             radius: shape.radius * scaleX,
             x: node.x(),
             y: node.y(),
           };
         }
+        return updatedShape;
       }
       return shape;
-    }));
+    });
+  
+    setShapes(updatedShapes);
+  
+    if (updatedShape) {
+      socket.emit("updateElement", { boardId, updatedShape });
+    }
   };
 
   const handleDragEnd = (e) => {
-    setShapes(shapes.map(shape => {
+    const updatedShapes = shapes.map(shape => {
       if (shape.id === e.target.id()) {
-        return {
-          ...shape,
-          x: e.target.x(),
-          y: e.target.y(),
-        };
+        return { ...shape, x: e.target.x(), y: e.target.y() };
       }
       return shape;
-    }));
+    });
+
+    setShapes(updatedShapes);
+    const updatedShape = updatedShapes.find(shape => shape.id === e.target.id());
+    socket.emit("updateElement", { boardId, updatedShape });
   };
 
   return (

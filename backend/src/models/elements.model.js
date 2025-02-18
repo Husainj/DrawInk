@@ -7,31 +7,16 @@ const elementSchema = new Schema({
         ref : "Board",
         required : true
     },
-
-    type : {
-        type : String,
-        enum : ['drawing', 'rectangle', 'circle', 'line'],
-        required : true ,
-    },
-
-    position : {
-        x : {type : Number , default : 0},
-        y : {type : Number , default : 0}
-    },
-
-    dimensions :{
-        width : {type : Number , default : 100 },
-        height : {type : Number , default : 100},
-        radius : Number
-    },
-
-    style : {
-        stroke: { type: String, default: '#000000' },
-        strokeWidth: { type: Number, default: 2 },
-        fill: { type: String, default: 'transparent' }
-    },
-
-    points: [{ x: Number, y: Number }]
+    sId : {type : Number , required : true},
+    type: { type: String, required: true }, // "square", "circle", "pen", etc.
+    x: { type: Number, required: true },
+    y: { type: Number, required: true },
+    width: { type: Number }, // For square
+    height: { type: Number }, // For square
+    radius: { type: Number }, // For circle and triangle
+    points: { type: Array }, // For pen
+    stroke: { type: String }, // Color for pen
+    fill: { type: String },
 
 } , {timestamps : true})
 
