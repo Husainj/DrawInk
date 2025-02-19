@@ -13,7 +13,8 @@ const BoardPage = () => {
   const [shapes, setShapes] = useState([]);
   const [board, setBoard] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
-  const [participants, setParticipants] = useState([]);
+  const [participants,  setParticipants] = useState([]);
+  const [code , setCode] = useState()
   const isDrawing = useRef(false);
   const isErasing = useRef(false);
   const stageRef = useRef(null);
@@ -31,7 +32,8 @@ const BoardPage = () => {
     const fetchBoardData = async () => {
       try {
         const response = await api.get(`/boards/${boardId}`);
-        setBoard(response.data.data); // Fixed: access data property
+        setBoard(response.data.data);
+        setCode(response.data.data.code)
       } catch (error) {
         console.error("Error fetching board data:", error);
       }
@@ -251,7 +253,7 @@ const BoardPage = () => {
   return (
     <div className="w-full h-screen flex flex-col bg-gray-100">
       <div className="flex justify-between items-center px-6 py-3 bg-white shadow-md">
-        <span className="text-gray-700 font-semibold">Board Code: {boardId}</span>
+        <span className="text-gray-700 font-semibold">Board Code: {code}</span>
    
         <button className="flex items-center gap-2 px-4 py-2 text-white bg-blue-500 rounded-lg hover:bg-blue-600">
           <FaShareAlt /> Share
