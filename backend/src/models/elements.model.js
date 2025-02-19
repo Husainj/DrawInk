@@ -7,7 +7,7 @@ const elementSchema = new Schema({
         ref : "Board",
         required : true
     },
-    sId : {type : Number , required : true},
+    id : {type : String , required : true},
     type: { type: String, required: true }, // "square", "circle", "pen", etc.
     x: { type: Number, required: true },
     y: { type: Number, required: true },

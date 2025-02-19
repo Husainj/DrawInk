@@ -11,7 +11,7 @@ const BoardPage = () => {
   const { boardId } = useParams();
   const [tool, setTool] = useState("select");
   const [shapes, setShapes] = useState([]);
-  const [board, setBoard] = useState();
+  const [board, setBoard] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [participants, setParticipants] = useState([]);
   const isDrawing = useRef(false);
@@ -31,7 +31,7 @@ const BoardPage = () => {
     const fetchBoardData = async () => {
       try {
         const response = await api.get(`/boards/${boardId}`);
-        setBoard(response.data);
+        setBoard(response.data.data); // Fixed: access data property
       } catch (error) {
         console.error("Error fetching board data:", error);
       }
@@ -54,6 +54,7 @@ const BoardPage = () => {
 
     socket.on("initialShapes", (shapes) => {
       setShapes(shapes); // Set the initial shapes
+      console.log("INITIAL SHAPES : " , shapes)
     });
 
 
@@ -65,7 +66,7 @@ const BoardPage = () => {
       socket.off("initialShapes");
       // socket.disconnect();
     };
-  }, [boardId , user._id]);
+  }, [boardId, user._id]);
 
   useEffect(() => {
     if (selectedId && transformerRef.current) {
@@ -77,17 +78,23 @@ const BoardPage = () => {
     }
   }, [selectedId]);
 
-  useEffect(()=>{
+  useEffect(() => {
     socket.on("elementAdded", (shape) => {
       setShapes((prev) => [...prev, shape]);
-    })
+    });
 
     socket.on("elementUpdated", (element) => {
       setShapes((prev) =>
         prev.map((s) => (s.id === element.id ? element : s))
       );
     });
-  } , [])
+
+    // Clean up socket listeners
+    return () => {
+      socket.off("elementAdded");
+      socket.off("elementUpdated");
+    };
+  }, []);
 
   const handleMouseDown = (e) => {
     if (tool === "select") {
@@ -111,6 +118,8 @@ const BoardPage = () => {
 
     const pos = e.target.getStage().getPointerPosition();
     let newShape;
+    const timestamp = Date.now();
+    const newId = timestamp.toString();
 
     if (tool === "pen") {
       isDrawing.current = true;
@@ -118,23 +127,23 @@ const BoardPage = () => {
         type: "pen",
         points: [pos.x, pos.y],
         stroke: "#2D3748",
-        id: Date.now().toString(),
+        id: newId,
       };
     } else {
       const shapeProps = {
         x: pos.x,
         y: pos.y,
         fill: "#4299E1",
-        id: Date.now().toString(),
+        id: newId,
         draggable: true,
       };
       if (tool === "square") newShape = { ...shapeProps, type: "square", width: 60, height: 60 };
       else if (tool === "circle") newShape = { ...shapeProps, type: "circle", radius: 30 };
       else if (tool === "triangle") newShape = { ...shapeProps, type: "triangle", radius: 50 };
     }
-    socket.emit("addElement", { boardId , newShape });
+    socket.emit("addElement", { boardId, newShape });
     setShapes((prev) => [...prev, newShape]);
-    console.log("SHAPES ON BOARD PAGE : " , shapes)
+    console.log("SHAPES ON BOARD PAGE : ", shapes);
   };
 
   const handleMouseMove = (e) => {
@@ -212,33 +221,49 @@ const BoardPage = () => {
   };
 
   const handleDragEnd = (e) => {
-    const updatedShapes = shapes.map(shape => {
-      if (shape.id === e.target.id()) {
-        return { ...shape, x: e.target.x(), y: e.target.y() };
+    console.log("Dragged Element ID:", e.target);
+    console.log("Current Shapes:", shapes); // Check if the shape IDs match
+  
+    setShapes((prevShapes) => {
+      const updatedShapes = prevShapes.map((shape) =>
+        shape.id === e.target.id()
+          ? { ...shape, x: e.target.x(), y: e.target.y() }
+          : shape
+      );
+  
+      console.log("Updated Shapes Array:", updatedShapes);
+  
+      const updatedShape = updatedShapes.find(
+        (shape) => shape.id === e.target.id()
+      );
+  
+      console.log("UPDATED ELEMENT IN THE BOARD PAGE:", updatedShape);
+  
+      if (updatedShape) {
+        socket.emit("updateElement", { boardId, updatedShape });
       }
-      return shape;
+  
+      return updatedShapes;
     });
-
-    setShapes(updatedShapes);
-    const updatedShape = updatedShapes.find(shape => shape.id === e.target.id());
-    socket.emit("updateElement", { boardId, updatedShape });
   };
+  
 
   return (
     <div className="w-full h-screen flex flex-col bg-gray-100">
       <div className="flex justify-between items-center px-6 py-3 bg-white shadow-md">
-        <span className="text-gray-700 font-semibold">Board ID: {boardId}</span>
+        <span className="text-gray-700 font-semibold">Board Code: {boardId}</span>
+   
         <button className="flex items-center gap-2 px-4 py-2 text-white bg-blue-500 rounded-lg hover:bg-blue-600">
           <FaShareAlt /> Share
         </button>
         <div>
-      <h1>Board Participants</h1>
-      <ul>
-        {participants.map((participant) => (
-          <li key={participant}>{participant}</li>
-        ))}
-      </ul>
-    </div>
+          <h1>Board Participants</h1>
+          <ul>
+            {participants.map((participant) => (
+              <li key={participant}>{participant}</li>
+            ))}
+          </ul>
+        </div>
       </div>
 
       <div className="flex-1 flex justify-center items-center p-4">
@@ -253,9 +278,8 @@ const BoardPage = () => {
           className="bg-white shadow-lg rounded-lg border border-gray-300"
         >
           <Layer>
-            {shapes.map((shape) => {
+            {shapes.map((shape, index) => {
               const shapeProps = {
-                key: shape.id,
                 id: shape.id,
                 draggable: tool === "select",
                 onClick: () => tool === "select" && setSelectedId(shape.id),
@@ -266,6 +290,7 @@ const BoardPage = () => {
               if (shape.type === "square") {
                 return (
                   <Rect
+                    key={`${shape.id}-${index}`}
                     {...shapeProps}
                     x={shape.x}
                     y={shape.y}
@@ -277,6 +302,7 @@ const BoardPage = () => {
               } else if (shape.type === "circle") {
                 return (
                   <Circle
+                    key={`${shape.id}-${index}`}
                     {...shapeProps}
                     x={shape.x}
                     y={shape.y}
@@ -287,6 +313,7 @@ const BoardPage = () => {
               } else if (shape.type === "triangle") {
                 return (
                   <RegularPolygon
+                    key={`${shape.id}-${index}`}
                     {...shapeProps}
                     x={shape.x}
                     y={shape.y}
@@ -298,6 +325,7 @@ const BoardPage = () => {
               } else if (shape.type === "pen") {
                 return (
                   <Line
+                    key={`${shape.id}-${index}`}
                     {...shapeProps}
                     points={shape.points}
                     stroke={shape.stroke}

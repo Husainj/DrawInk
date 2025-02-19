@@ -27,7 +27,7 @@ export const setupSocket = (io) => {
       console.log("BOARD ID IN ADD SHAPE : " , boardId)
       console.log("ELEMENT REACHED IN ADD ELEMENT : " , newShape)
       newShape["boardId"] = boardId
-      newShape["sId"] = newShape.id
+      newShape["id"] = newShape.id
       try {
         const ElementRes = new Element(newShape );
         await ElementRes.save();
@@ -44,9 +44,11 @@ export const setupSocket = (io) => {
     // Handle element updates
     socket.on("updateElement", async(data) => {
       const { boardId, updatedShape } = data;
+
+      console.log("ELEMENT INSIDE UPDATE SOCKET : " , updatedShape)
       try {
         const updatedShapeRes = await Element.findOneAndUpdate(
-          { sId: updatedShape.id },
+          { id: updatedShape.id },
           updatedShape,
           { new: true }
         );
