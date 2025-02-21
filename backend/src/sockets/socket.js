@@ -61,9 +61,23 @@ export const setupSocket = (io) => {
     });
 
     // Handle element deletion
-    socket.on("deleteElement", (data) => {
+    socket.on("deleteElement", async(data) => {
       const { boardId, elementId } = data;
-      io.to(boardId).emit("elementDeleted", elementId);
+      try {
+      
+        console.log("INSIDE DELETE SOCKET ID:", elementId);
+
+        const deletedElement = await Element.findOneAndDelete({ boardId, id: elementId });
+
+        if (!deletedElement) {
+            console.log("Element not found!");
+            return;
+        }
+
+        io.to(boardId).emit("elementDeleted", elementId);
+    } catch (error) {
+        console.error("Error deleting element:", error);
+    }
     });
 
     // socket.on("leaveBoard", async ({ boardId, userId }) => {

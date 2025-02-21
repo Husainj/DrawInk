@@ -91,10 +91,16 @@ const BoardPage = () => {
       );
     });
 
+
+    socket.on("elementDeleted", (elementId) => {
+      setShapes((prev) => prev.filter((s) => s.id !== elementId));
+    });
+
     // Clean up socket listeners
     return () => {
       socket.off("elementAdded");
       socket.off("elementUpdated");
+      socket.off("elementDeleted");
     };
   }, []);
 
@@ -113,7 +119,10 @@ const BoardPage = () => {
       const clickedShape = e.target;
       if (clickedShape && clickedShape !== e.target.getStage()) {
         // Delete the shape by filtering it out from the shapes array
+        socket.emit("deleteElement", { boardId, elementId: clickedShape.attrs.id });
         setShapes(shapes.filter(shape => shape.id !== clickedShape.attrs.id));
+        console.log("DELETE SHAPE ID : " , clickedShape.attrs.id)
+       
       }
       return;
     }
@@ -156,6 +165,7 @@ const BoardPage = () => {
       
       if (shape && shape !== e.target.getStage()) {
         // Delete the shape that the eraser is hovering over
+        socket.emit("deleteElement", { boardId, elementId: shape.attrs.id });
         setShapes(prevShapes => prevShapes.filter(s => s.id !== shape.attrs.id));
       }
       return;
