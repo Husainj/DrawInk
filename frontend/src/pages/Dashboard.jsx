@@ -45,6 +45,7 @@ const Dashboard = () => {
     // Here you would typically handle the space creation
      console.log('Creating space:', newSpaceName);
 
+     
      try {
         const formData = new FormData();
         formData.append('boardname', newSpaceName);
