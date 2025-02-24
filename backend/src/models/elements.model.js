@@ -9,8 +9,8 @@ const elementSchema = new Schema({
     },
     id : {type : String , required : true},
     type: { type: String, required: true }, // "square", "circle", "pen", etc.
-    x: { type: Number, required: true },
-    y: { type: Number, required: true },
+    x: { type: Number },
+    y: { type: Number },
     width: { type: Number }, // For square
     height: { type: Number }, // For square
     radius: { type: Number }, // For circle and triangle

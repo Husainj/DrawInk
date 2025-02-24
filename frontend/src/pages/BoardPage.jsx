@@ -6,34 +6,34 @@ import api from "../services/api.js";
 import io from "socket.io-client";
 import { useSelector } from "react-redux";
 
-
 const BoardPage = () => {
   const { boardId } = useParams();
   const [tool, setTool] = useState("select");
   const [shapes, setShapes] = useState([]);
   const [board, setBoard] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
-  const [participants,  setParticipants] = useState([]);
-  const [code , setCode] = useState()
+  const [participants, setParticipants] = useState([]);
+  const [code, setCode] = useState();
   const isDrawing = useRef(false);
   const isErasing = useRef(false);
   const stageRef = useRef(null);
   const transformerRef = useRef(null);
   const user = useSelector((state) => state.auth.user);
+  const currentDrawingId = useRef(null); // Track the current drawing ID
+  const batchedPoints = useRef([]); // Store points temporarily for batching
 
-
-  const socket = io("http://localhost:8000" , {
-    auth : {
-      userId : user._id, 
-    }
+  const socket = io("http://localhost:8000", {
+    auth: { userId: user._id },
   });
+  const batchInterval = 500; // Changed from 100ms to 500ms // Send updates every 100ms
 
+  // Fetch initial board data and set up socket listeners
   useEffect(() => {
     const fetchBoardData = async () => {
       try {
         const response = await api.get(`/boards/${boardId}`);
         setBoard(response.data.data);
-        setCode(response.data.data.code)
+        setCode(response.data.data.code);
       } catch (error) {
         console.error("Error fetching board data:", error);
       }
@@ -42,37 +42,54 @@ const BoardPage = () => {
 
     socket.emit("joinBoard", boardId);
 
-    // Listen for userJoined events
     socket.on("userJoined", (data) => {
-      console.log("User joined:", data.userId);
-      setParticipants(data.participants); // Update the participants list
+      setParticipants(data.participants);
     });
 
-    // const handleBeforeUnload = () => {
-    //   socket.emit("leaveBoard", { boardId, userId: user._id });
-    // };
-
-    // window.addEventListener("beforeunload", handleBeforeUnload);
-
-    socket.on("initialShapes", (shapes) => {
-      setShapes(shapes); // Set the initial shapes
-      console.log("INITIAL SHAPES : " , shapes)
+    socket.on("initialShapes", (initialShapes) => {
+      setShapes(initialShapes);
     });
 
+    socket.on("elementAdded", (shape) => {
+      setShapes((prev) => {
+        if (!prev.some((s) => s.id === shape.id)) {
+          return [...prev, shape];
+        }
+        return prev;
+      });
+    });
 
+    socket.on("elementUpdated", (element) => {
+      setShapes((prev) => prev.map((s) => (s.id === element.id ? element : s)));
+    });
 
+    socket.on("elementDeleted", (elementId) => {
+      setShapes((prev) => prev.filter((s) => s.id !== elementId));
+    });
+
+    socket.on("drawingUpdated", (data) => {
+      const { drawingId, points } = data;
+      setShapes((prev) =>
+        prev.map((shape) =>
+          shape.id === drawingId && shape.type === "pen"
+            ? { ...shape, points: [...shape.points, ...points] }
+            : shape
+        )
+      );
+    });
     return () => {
-      // Clean up event listeners
-      // window.removeEventListener("beforeunload", handleBeforeUnload);
       socket.off("userJoined");
       socket.off("initialShapes");
-      // socket.disconnect();
+      socket.off("elementAdded");
+      socket.off("elementUpdated");
+      socket.off("elementDeleted");
     };
   }, [boardId, user._id]);
 
+  // Transformer setup for selected shapes
   useEffect(() => {
     if (selectedId && transformerRef.current) {
-      const node = stageRef.current.findOne('#' + selectedId);
+      const node = stageRef.current.findOne("#" + selectedId);
       if (node) {
         transformerRef.current.nodes([node]);
         transformerRef.current.getLayer().batchDraw();
@@ -80,66 +97,54 @@ const BoardPage = () => {
     }
   }, [selectedId]);
 
+  // Batch drawing updates to the server
   useEffect(() => {
-    socket.on("elementAdded", (shape) => {
-      setShapes((prev) => [...prev, shape]);
-    });
+    const interval = setInterval(() => {
+      if (batchedPoints.current.length > 0 && currentDrawingId.current) {
+        const points = batchedPoints.current;
+        socket.emit("updateDrawing", {
+          boardId,
+          drawingId: currentDrawingId.current,
+          points,
+        });
+        batchedPoints.current = []; // Clear after sending
+      }
+    }, batchInterval);
 
-    socket.on("elementUpdated", (element) => {
-      setShapes((prev) =>
-        prev.map((s) => (s.id === element.id ? element : s))
-      );
-    });
-
-
-    socket.on("elementDeleted", (elementId) => {
-      setShapes((prev) => prev.filter((s) => s.id !== elementId));
-    });
-
-    // Clean up socket listeners
-    return () => {
-      socket.off("elementAdded");
-      socket.off("elementUpdated");
-      socket.off("elementDeleted");
-    };
-  }, []);
+    return () => clearInterval(interval);
+  }, [boardId]);
 
   const handleMouseDown = (e) => {
     if (tool === "select") {
-      if (e.target === e.target.getStage()) {
-        setSelectedId(null);
-        return;
-      }
+      if (e.target === e.target.getStage()) setSelectedId(null);
       return;
     }
 
     if (tool === "eraser") {
       isErasing.current = true;
-      // Get the clicked shape
       const clickedShape = e.target;
       if (clickedShape && clickedShape !== e.target.getStage()) {
-        // Delete the shape by filtering it out from the shapes array
         socket.emit("deleteElement", { boardId, elementId: clickedShape.attrs.id });
-        setShapes(shapes.filter(shape => shape.id !== clickedShape.attrs.id));
-        console.log("DELETE SHAPE ID : " , clickedShape.attrs.id)
-       
       }
       return;
     }
 
     const pos = e.target.getStage().getPointerPosition();
-    let newShape;
     const timestamp = Date.now();
     const newId = timestamp.toString();
 
     if (tool === "pen") {
       isDrawing.current = true;
-      newShape = {
+      currentDrawingId.current = newId;
+      const newShape = {
         type: "pen",
         points: [pos.x, pos.y],
         stroke: "#2D3748",
         id: newId,
       };
+      batchedPoints.current = [pos.x, pos.y]; // Initialize points
+      socket.emit("addElement", { boardId, newShape });
+      setShapes((prev) => [...prev, newShape]); // Add locally immediately
     } else {
       const shapeProps = {
         x: pos.x,
@@ -148,123 +153,91 @@ const BoardPage = () => {
         id: newId,
         draggable: true,
       };
+      let newShape;
       if (tool === "square") newShape = { ...shapeProps, type: "square", width: 60, height: 60 };
       else if (tool === "circle") newShape = { ...shapeProps, type: "circle", radius: 30 };
       else if (tool === "triangle") newShape = { ...shapeProps, type: "triangle", radius: 50 };
+      socket.emit("addElement", { boardId, newShape });
+      setShapes((prev) => [...prev, newShape]);
     }
-    socket.emit("addElement", { boardId, newShape });
-    setShapes((prev) => [...prev, newShape]);
-    console.log("SHAPES ON BOARD PAGE : ", shapes);
   };
 
   const handleMouseMove = (e) => {
     if (tool === "eraser" && isErasing.current) {
-      // Get all shapes under the current pointer position
       const pos = e.target.getStage().getPointerPosition();
       const shape = e.target.getStage().getIntersection(pos);
-      
       if (shape && shape !== e.target.getStage()) {
-        // Delete the shape that the eraser is hovering over
         socket.emit("deleteElement", { boardId, elementId: shape.attrs.id });
-        setShapes(prevShapes => prevShapes.filter(s => s.id !== shape.attrs.id));
       }
       return;
     }
 
-    if (!isDrawing.current) return;
+    if (!isDrawing.current || tool !== "pen" || !currentDrawingId.current) return;
+
     const point = e.target.getStage().getPointerPosition();
+    batchedPoints.current = [...batchedPoints.current, point.x, point.y];
+
     setShapes((prev) =>
-      prev.map((shape, index) =>
-        index === prev.length - 1 ? { ...shape, points: [...shape.points, point.x, point.y] } : shape
+      prev.map((shape) =>
+        shape.id === currentDrawingId.current && shape.type === "pen"
+          ? { ...shape, points: [...shape.points, point.x, point.y] }
+          : shape
       )
     );
   };
 
   const handleMouseUp = () => {
+    if (isDrawing.current && tool === "pen" && batchedPoints.current.length > 0) {
+      socket.emit("updateDrawing", {
+        boardId,
+        drawingId: currentDrawingId.current,
+        points: batchedPoints.current,
+        isComplete: true, // Indicate drawing is finished
+      });
+      batchedPoints.current = [];
+      currentDrawingId.current = null;
+    }
     isDrawing.current = false;
     isErasing.current = false;
   };
-
   const handleTransformEnd = (e) => {
     const node = e.target;
     const scaleX = node.scaleX();
     const scaleY = node.scaleY();
-
     node.scaleX(1);
     node.scaleY(1);
 
-    let updatedShape = null;
+    const updatedShape = shapes.find((shape) => shape.id === node.id());
+    if (!updatedShape) return;
 
-    const updatedShapes = shapes.map(shape => {
-      if (shape.id === node.id()) {
-        if (shape.type === "circle") {
-          updatedShape = {
-            ...shape,
-            radius: shape.radius * scaleX,
-            x: node.x(),
-            y: node.y(),
-          };
-        } else if (shape.type === "square") {
-          updatedShape = {
-            ...shape,
-            width: node.width() * scaleX,
-            height: node.height() * scaleY,
-            x: node.x(),
-            y: node.y(),
-          };
-        } else if (shape.type === "triangle") {
-          updatedShape = {
-            ...shape,
-            radius: shape.radius * scaleX,
-            x: node.x(),
-            y: node.y(),
-          };
-        }
-        return updatedShape;
-      }
-      return shape;
-    });
-  
-    setShapes(updatedShapes);
-  
-    if (updatedShape) {
-      socket.emit("updateElement", { boardId, updatedShape });
+    let newShape;
+    if (updatedShape.type === "circle") {
+      newShape = { ...updatedShape, radius: updatedShape.radius * scaleX, x: node.x(), y: node.y() };
+    } else if (updatedShape.type === "square") {
+      newShape = { ...updatedShape, width: node.width() * scaleX, height: node.height() * scaleY, x: node.x(), y: node.y() };
+    } else if (updatedShape.type === "triangle") {
+      newShape = { ...updatedShape, radius: updatedShape.radius * scaleX, x: node.x(), y: node.y() };
+    }
+
+    if (newShape) {
+      setShapes((prev) => prev.map((s) => (s.id === newShape.id ? newShape : s)));
+      socket.emit("updateElement", { boardId, updatedShape: newShape });
     }
   };
 
   const handleDragEnd = (e) => {
-    console.log("Dragged Element ID:", e.target);
-    console.log("Current Shapes:", shapes); // Check if the shape IDs match
-  
-    setShapes((prevShapes) => {
-      const updatedShapes = prevShapes.map((shape) =>
-        shape.id === e.target.id()
-          ? { ...shape, x: e.target.x(), y: e.target.y() }
-          : shape
-      );
-  
-      console.log("Updated Shapes Array:", updatedShapes);
-  
-      const updatedShape = updatedShapes.find(
-        (shape) => shape.id === e.target.id()
-      );
-  
-      console.log("UPDATED ELEMENT IN THE BOARD PAGE:", updatedShape);
-  
-      if (updatedShape) {
-        socket.emit("updateElement", { boardId, updatedShape });
-      }
-  
-      return updatedShapes;
-    });
+    const updatedShape = shapes.find((shape) => shape.id === e.target.id());
+    if (updatedShape) {
+      const newShape = { ...updatedShape, x: e.target.x(), y: e.target.y() };
+      setShapes((prev) => prev.map((s) => (s.id === newShape.id ? newShape : s)));
+      socket.emit("updateElement", { boardId, updatedShape: newShape });
+    }
   };
-  
 
   return (
     <div className="w-full h-screen flex flex-col bg-gray-100">
       <div className="flex justify-between items-center px-6 py-3 bg-white shadow-md">
         <span className="text-gray-700 font-semibold">Board Code: {code}</span>
-   
         <button className="flex items-center gap-2 px-4 py-2 text-white bg-blue-500 rounded-lg hover:bg-blue-600">
           <FaShareAlt /> Share
         </button>
@@ -300,52 +273,13 @@ const BoardPage = () => {
               };
 
               if (shape.type === "square") {
-                return (
-                  <Rect
-                    key={`${shape.id}-${index}`}
-                    {...shapeProps}
-                    x={shape.x}
-                    y={shape.y}
-                    width={shape.width}
-                    height={shape.height}
-                    fill={shape.fill}
-                  />
-                );
+                return <Rect key={`${shape.id}-${index}`} {...shapeProps} x={shape.x} y={shape.y} width={shape.width} height={shape.height} fill={shape.fill} />;
               } else if (shape.type === "circle") {
-                return (
-                  <Circle
-                    key={`${shape.id}-${index}`}
-                    {...shapeProps}
-                    x={shape.x}
-                    y={shape.y}
-                    radius={shape.radius}
-                    fill={shape.fill}
-                  />
-                );
+                return <Circle key={`${shape.id}-${index}`} {...shapeProps} x={shape.x} y={shape.y} radius={shape.radius} fill={shape.fill} />;
               } else if (shape.type === "triangle") {
-                return (
-                  <RegularPolygon
-                    key={`${shape.id}-${index}`}
-                    {...shapeProps}
-                    x={shape.x}
-                    y={shape.y}
-                    sides={3}
-                    radius={shape.radius}
-                    fill={shape.fill}
-                  />
-                );
+                return <RegularPolygon key={`${shape.id}-${index}`} {...shapeProps} x={shape.x} y={shape.y} sides={3} radius={shape.radius} fill={shape.fill} />;
               } else if (shape.type === "pen") {
-                return (
-                  <Line
-                    key={`${shape.id}-${index}`}
-                    {...shapeProps}
-                    points={shape.points}
-                    stroke={shape.stroke}
-                    strokeWidth={2}
-                    tension={0.5}
-                    lineCap="round"
-                  />
-                );
+                return <Line key={`${shape.id}-${index}`} {...shapeProps} points={shape.points} stroke={shape.stroke} strokeWidth={2} tension={0.5} lineCap="round" />;
               }
               return null;
             })}
@@ -355,12 +289,7 @@ const BoardPage = () => {
                 boundBoxFunc={(oldBox, newBox) => {
                   const minSize = 5;
                   const maxSize = 800;
-                  if (
-                    newBox.width < minSize ||
-                    newBox.height < minSize ||
-                    newBox.width > maxSize ||
-                    newBox.height > maxSize
-                  ) {
+                  if (newBox.width < minSize || newBox.height < minSize || newBox.width > maxSize || newBox.height > maxSize) {
                     return oldBox;
                   }
                   return newBox;
@@ -380,9 +309,7 @@ const BoardPage = () => {
             }`}
             onClick={() => {
               setTool(shape);
-              if (shape !== "select") {
-                setSelectedId(null);
-              }
+              if (shape !== "select") setSelectedId(null);
             }}
           >
             {shape === "select" && <FaMousePointer size={18} />}
