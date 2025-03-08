@@ -10,6 +10,7 @@ const BoardPage = () => {
   const { boardId } = useParams();
   const [tool, setTool] = useState("select");
   const [shapes, setShapes] = useState([]);
+  const [currentDrawing, setCurrentDrawing] = useState(null);
   const [board, setBoard] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [participants, setParticipants] = useState([]);
@@ -18,17 +19,21 @@ const BoardPage = () => {
   const isErasing = useRef(false);
   const stageRef = useRef(null);
   const transformerRef = useRef(null);
+  const currentDrawingId = useRef(null);
+  const batchedPoints = useRef([]);
+  const socketRef = useRef(null); // Use ref to persist socket
   const user = useSelector((state) => state.auth.user);
-  const currentDrawingId = useRef(null); // Track the current drawing ID
-  const batchedPoints = useRef([]); // Store points temporarily for batching
 
-  const socket = io("http://localhost:8000", {
-    auth: { userId: user._id },
-  });
-  const batchInterval = 500; // Changed from 100ms to 500ms // Send updates every 100ms
+  const batchInterval = 500;
 
-  // Fetch initial board data and set up socket listeners
+  // Initialize socket and set up listeners
   useEffect(() => {
+    socketRef.current = io("http://localhost:8000", {
+      auth: { userId: user._id },
+    });
+
+    const socket = socketRef.current; // Alias for cleaner code
+
     const fetchBoardData = async () => {
       try {
         const response = await api.get(`/boards/${boardId}`);
@@ -76,38 +81,37 @@ const BoardPage = () => {
             : shape
         )
       );
+      if (drawingId === currentDrawingId.current) {
+        setCurrentDrawing((prev) => ({
+          ...prev,
+          points: [...prev.points, ...points],
+        }));
+      }
     });
+
     return () => {
+      socket.disconnect();
       socket.off("userJoined");
       socket.off("initialShapes");
       socket.off("elementAdded");
       socket.off("elementUpdated");
       socket.off("elementDeleted");
+      socket.off("drawingUpdated");
     };
   }, [boardId, user._id]);
 
-  // Transformer setup for selected shapes
-  useEffect(() => {
-    if (selectedId && transformerRef.current) {
-      const node = stageRef.current.findOne("#" + selectedId);
-      if (node) {
-        transformerRef.current.nodes([node]);
-        transformerRef.current.getLayer().batchDraw();
-      }
-    }
-  }, [selectedId]);
-
-  // Batch drawing updates to the server
+  // Batch drawing updates
   useEffect(() => {
     const interval = setInterval(() => {
       if (batchedPoints.current.length > 0 && currentDrawingId.current) {
         const points = batchedPoints.current;
-        socket.emit("updateDrawing", {
+        socketRef.current.emit("updateDrawing", {
           boardId,
           drawingId: currentDrawingId.current,
           points,
+          isComplete: false,
         });
-        batchedPoints.current = []; // Clear after sending
+        batchedPoints.current = [];
       }
     }, batchInterval);
 
@@ -124,7 +128,7 @@ const BoardPage = () => {
       isErasing.current = true;
       const clickedShape = e.target;
       if (clickedShape && clickedShape !== e.target.getStage()) {
-        socket.emit("deleteElement", { boardId, elementId: clickedShape.attrs.id });
+        socketRef.current.emit("deleteElement", { boardId, elementId: clickedShape.attrs.id });
       }
       return;
     }
@@ -142,9 +146,9 @@ const BoardPage = () => {
         stroke: "#2D3748",
         id: newId,
       };
-      batchedPoints.current = [pos.x, pos.y]; // Initialize points
-      socket.emit("addElement", { boardId, newShape });
-      setShapes((prev) => [...prev, newShape]); // Add locally immediately
+      batchedPoints.current = [pos.x, pos.y];
+      socketRef.current.emit("addElement", { boardId, newShape });
+      setCurrentDrawing(newShape);
     } else {
       const shapeProps = {
         x: pos.x,
@@ -157,7 +161,7 @@ const BoardPage = () => {
       if (tool === "square") newShape = { ...shapeProps, type: "square", width: 60, height: 60 };
       else if (tool === "circle") newShape = { ...shapeProps, type: "circle", radius: 30 };
       else if (tool === "triangle") newShape = { ...shapeProps, type: "triangle", radius: 50 };
-      socket.emit("addElement", { boardId, newShape });
+      socketRef.current.emit("addElement", { boardId, newShape });
       setShapes((prev) => [...prev, newShape]);
     }
   };
@@ -167,7 +171,7 @@ const BoardPage = () => {
       const pos = e.target.getStage().getPointerPosition();
       const shape = e.target.getStage().getIntersection(pos);
       if (shape && shape !== e.target.getStage()) {
-        socket.emit("deleteElement", { boardId, elementId: shape.attrs.id });
+        socketRef.current.emit("deleteElement", { boardId, elementId: shape.attrs.id });
       }
       return;
     }
@@ -177,29 +181,28 @@ const BoardPage = () => {
     const point = e.target.getStage().getPointerPosition();
     batchedPoints.current = [...batchedPoints.current, point.x, point.y];
 
-    setShapes((prev) =>
-      prev.map((shape) =>
-        shape.id === currentDrawingId.current && shape.type === "pen"
-          ? { ...shape, points: [...shape.points, point.x, point.y] }
-          : shape
-      )
-    );
+    setCurrentDrawing((prev) => ({
+      ...prev,
+      points: [...prev.points, point.x, point.y],
+    }));
   };
 
   const handleMouseUp = () => {
     if (isDrawing.current && tool === "pen" && batchedPoints.current.length > 0) {
-      socket.emit("updateDrawing", {
+      socketRef.current.emit("updateDrawing", {
         boardId,
         drawingId: currentDrawingId.current,
         points: batchedPoints.current,
-        isComplete: true, // Indicate drawing is finished
+        isComplete: true,
       });
       batchedPoints.current = [];
       currentDrawingId.current = null;
+      setCurrentDrawing(null);
     }
     isDrawing.current = false;
     isErasing.current = false;
   };
+
   const handleTransformEnd = (e) => {
     const node = e.target;
     const scaleX = node.scaleX();
@@ -221,7 +224,7 @@ const BoardPage = () => {
 
     if (newShape) {
       setShapes((prev) => prev.map((s) => (s.id === newShape.id ? newShape : s)));
-      socket.emit("updateElement", { boardId, updatedShape: newShape });
+      socketRef.current.emit("updateElement", { boardId, updatedShape: newShape });
     }
   };
 
@@ -230,9 +233,20 @@ const BoardPage = () => {
     if (updatedShape) {
       const newShape = { ...updatedShape, x: e.target.x(), y: e.target.y() };
       setShapes((prev) => prev.map((s) => (s.id === newShape.id ? newShape : s)));
-      socket.emit("updateElement", { boardId, updatedShape: newShape });
+      socketRef.current.emit("updateElement", { boardId, updatedShape: newShape });
     }
   };
+
+  // Transformer setup
+  useEffect(() => {
+    if (selectedId && transformerRef.current) {
+      const node = stageRef.current.findOne("#" + selectedId);
+      if (node) {
+        transformerRef.current.nodes([node]);
+        transformerRef.current.getLayer().batchDraw();
+      }
+    }
+  }, [selectedId]);
 
   return (
     <div className="w-full h-screen flex flex-col bg-gray-100">
@@ -278,11 +292,21 @@ const BoardPage = () => {
                 return <Circle key={`${shape.id}-${index}`} {...shapeProps} x={shape.x} y={shape.y} radius={shape.radius} fill={shape.fill} />;
               } else if (shape.type === "triangle") {
                 return <RegularPolygon key={`${shape.id}-${index}`} {...shapeProps} x={shape.x} y={shape.y} sides={3} radius={shape.radius} fill={shape.fill} />;
-              } else if (shape.type === "pen") {
+              } else if (shape.type === "pen" && shape.id !== currentDrawingId.current) {
                 return <Line key={`${shape.id}-${index}`} {...shapeProps} points={shape.points} stroke={shape.stroke} strokeWidth={2} tension={0.5} lineCap="round" />;
               }
               return null;
             })}
+            {currentDrawing && (
+              <Line
+                id={currentDrawing.id}
+                points={currentDrawing.points || []} // Fallback to empty array if points is undefined
+                stroke={currentDrawing.stroke}
+                strokeWidth={2}
+                tension={0.5}
+                lineCap="round"
+              />
+            )}
             {selectedId && tool === "select" && (
               <Transformer
                 ref={transformerRef}

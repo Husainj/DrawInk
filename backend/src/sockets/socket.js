@@ -64,32 +64,51 @@ export const setupSocket = (io) => {
 
     socket.on("updateDrawing", async ({ boardId, drawingId, points, isComplete }) => {
       try {
-        if (!drawingBuffers.has(drawingId)) {
+        let buffer = drawingBuffers.get(drawingId);
+        if (!buffer) {
           const drawing = await Element.findOne({ boardId, id: drawingId });
-          if (drawing) {
-            drawingBuffers.set(drawingId, { points: drawing.points, boardId });
+          if (!drawing) {
+            console.error(`Drawing ${drawingId} not found`);
+            return;
           }
+          buffer = { points: drawing.points || [], boardId, isComplete: false };
+          drawingBuffers.set(drawingId, buffer);
         }
-
-        const buffer = drawingBuffers.get(drawingId);
-        if (buffer) {
-          buffer.points = [...buffer.points, ...points];
-          io.to(boardId).emit("drawingUpdated", { drawingId, points });
-
-          if (isComplete) {
-            await Element.findOneAndUpdate(
-              { boardId, id: drawingId },
-              { points: buffer.points },
-              { new: true }
-            );
-            drawingBuffers.delete(drawingId);
-            console.log(`Drawing ${drawingId} completed and saved`);
-          }
+    
+        buffer.points = [...buffer.points, ...points];
+        io.to(boardId).emit("drawingUpdated", { drawingId, points });
+    
+        if (isComplete) {
+          await Element.findOneAndUpdate(
+            { boardId, id: drawingId },
+            { points: buffer.points },
+            { new: true }
+          );
+          drawingBuffers.delete(drawingId); // Ensure immediate cleanup
+          console.log(`Drawing ${drawingId} completed and saved`);
         }
       } catch (error) {
         console.error("Error updating drawing:", error);
       }
     });
+    
+    // Periodic save with better cleanup
+    setInterval(async () => {
+      for (const [drawingId, { points, boardId, isComplete }] of drawingBuffers) {
+        if (!isComplete) {
+          try {
+            await Element.findOneAndUpdate(
+              { boardId, id: drawingId },
+              { points },
+              { new: true }
+            );
+            console.log(`Saved in-progress drawing ${drawingId} to database`);
+          } catch (error) {
+            console.error("Error saving drawing to DB:", error);
+          }
+        }
+      }
+    }, 5000);
 
     socket.on("disconnect", async () => {
       console.log(`User disconnected: ${socket.id}`);
@@ -111,19 +130,5 @@ export const setupSocket = (io) => {
     });
   });
 
-  // Periodic save to database
-  setInterval(async () => {
-    for (const [drawingId, { points, boardId }] of drawingBuffers) {
-      try {
-        await Element.findOneAndUpdate(
-          { boardId, id: drawingId },
-          { points },
-          { new: true }
-        );
-        console.log(`Saved drawing ${drawingId} to database`);
-      } catch (error) {
-        console.error("Error saving drawing to DB:", error);
-      }
-    }
-  }, 5000); // Every 5 seconds
+  
 };
