@@ -10,6 +10,7 @@ import elementRouter from "./routes/element.routes.js";
 import http from "http"; // Import http module
 import { Server } from "socket.io"; // Import Socket.IO
 import { setupSocket } from "./sockets/socket.js";
+import {ExpressPeerServer} from "peer"
 const app = express();
 
 // Create HTTP server
@@ -30,6 +31,12 @@ app.use((req, res, next) => {
   req.io = io; // Attach io to req
   next();
 });
+
+const peerServer = ExpressPeerServer(server , {
+  path: "/peerjs"
+});
+
+app.use("/peerjs" , peerServer)
 
 // Existing middleware
 app.use(
