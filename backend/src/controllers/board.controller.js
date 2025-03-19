@@ -82,12 +82,12 @@ const joinBoard = asyncHandler(async(req, res)=>{
         await board.save();
     }
 
-    const io = req.io;
-    io.to(board._id.toString()).emit("userJoined" , {
-        userId,
-        boardId : board._id,
-        participants : board.participants
-    })
+    // const io = req.io;
+    // io.to(board._id.toString()).emit("userJoined" , {
+    //     userId,
+    //     boardId : board._id,
+    //     participants : board.participants
+    // })
 
     return res.status(200)
     .json(

@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { Stage, Layer, Rect, Circle, Line, RegularPolygon, Transformer } from "react-konva";
-import { FaSquare, FaCircle, FaPlay, FaPen, FaEraser, FaShareAlt, FaMousePointer } from "react-icons/fa";
+import { FaSquare, FaCircle, FaPlay, FaPen, FaEraser, FaShareAlt, FaMousePointer, FaVideo, FaVideoSlash, FaMicrophone, FaMicrophoneSlash } from "react-icons/fa";
 import { useParams } from "react-router-dom";
 import api from "../services/api.js";
 import io from "socket.io-client";
 import { useSelector } from "react-redux";
+import Peer from "peerjs";
 
 const BoardPage = () => {
   const { boardId } = useParams();
@@ -15,24 +16,102 @@ const BoardPage = () => {
   const [selectedId, setSelectedId] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [code, setCode] = useState();
+  const [isVideoOn, setIsVideoOn] = useState(true);
+  const [isAudioOn, setIsAudioOn] = useState(true);
+  const [videoStates, setVideoStates] = useState(new Map()); // Track video on/off for all users
   const isDrawing = useRef(false);
   const isErasing = useRef(false);
   const stageRef = useRef(null);
   const transformerRef = useRef(null);
   const currentDrawingId = useRef(null);
   const batchedPoints = useRef([]);
-  const socketRef = useRef(null); // Use ref to persist socket
+  const socketRef = useRef(null);
   const user = useSelector((state) => state.auth.user);
+
+  const [peer, setPeer] = useState(null);
+  const [remoteStreams, setRemoteStreams] = useState(new Map());
+  const localStreamRef = useRef(null);
+  const videoContainerRef = useRef(null);
+  const peerConnections = useRef(new Map());
 
   const batchInterval = 500;
 
-  // Initialize socket and set up listeners
+  const generatePeerId = () => `${user._id}-${Math.random().toString(36).substr(2, 5)}`;
+
   useEffect(() => {
     socketRef.current = io("http://localhost:8000", {
       auth: { userId: user._id },
     });
 
-    const socket = socketRef.current; // Alias for cleaner code
+    const socket = socketRef.current;
+    socket.emit("joinBoard", boardId);
+
+    const initializePeer = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
+        localStreamRef.current = stream;
+        addVideoStream(user._id, stream, true);
+        setVideoStates((prev) => new Map(prev).set(user._id, true)); // Initial video state
+
+        const peerInstance = new Peer(generatePeerId(), {
+          debug: 3,
+        });
+
+        peerInstance.on("open", (id) => {
+          console.log("Connected to PeerJS cloud with ID:", id);
+          setPeer(peerInstance);
+          socket.emit("peerConnected", { boardId, userId: user._id });
+        });
+
+        peerInstance.on("call", (call) => {
+          if (call.peer.includes(user._id)) {
+            console.log("Ignoring self-call from:", call.peer);
+            call.close();
+            return;
+          }
+
+          console.log("Receiving call from:", call.peer);
+          peerConnections.current.set(call.peer, call);
+          call.answer(localStreamRef.current);
+
+          call.on("stream", (remoteStream) => {
+            console.log("Received remote stream :", remoteStream);
+            setRemoteStreams((prev) => {
+              const newMap = new Map(prev);
+              newMap.set(call.peer, remoteStream);
+              return newMap;
+            });
+            // Assume video is on initially for remote users
+            setVideoStates((prev) => new Map(prev).set(call.peer, true));
+            console.log("REMOTE STREAMS : " , remoteStreams)
+          });
+
+          call.on("close", () => {
+            console.log("Call closed with:", call.peer);
+            setRemoteStreams((prev) => {
+              const newMap = new Map(prev);
+              newMap.delete(call.peer);
+              return newMap;
+            });
+            setVideoStates((prev) => {
+              const newMap = new Map(prev);
+              newMap.delete(call.peer);
+              return newMap;
+            });
+            peerConnections.current.delete(call.peer);
+          });
+        });
+
+        peerInstance.on("error", (err) => {
+          console.error("PeerJS error:", err);
+        });
+      } catch (error) {
+        console.error("Media device error:", error);
+      }
+    };
 
     const fetchBoardData = async () => {
       try {
@@ -43,12 +122,46 @@ const BoardPage = () => {
         console.error("Error fetching board data:", error);
       }
     };
-    fetchBoardData();
 
-    socket.emit("joinBoard", boardId);
+    fetchBoardData();
+    initializePeer();
 
     socket.on("userJoined", (data) => {
+      console.log("User joined board:", data.userId);
       setParticipants(data.participants);
+      if (data.userId !== user._id && peer && localStreamRef.current) {
+        connectToPeer(data.userId);
+      }
+    });
+
+    socket.on("peerConnected", (data) => {
+      console.log("Peer connected:", data.userId);
+      if (data.userId !== user._id && peer && localStreamRef.current) {
+        connectToPeer(data.userId);
+      }
+    });
+
+    socket.on("userLeft", (data) => {
+      console.log("User left board:", data.userId);
+      if (peerConnections.current.has(data.userId)) {
+        peerConnections.current.get(data.userId).close();
+        peerConnections.current.delete(data.userId);
+        setRemoteStreams((prev) => {
+          const newMap = new Map(prev);
+          newMap.delete(data.userId);
+          return newMap;
+        });
+        setVideoStates((prev) => {
+          const newMap = new Map(prev);
+          newMap.delete(data.userId);
+          return newMap;
+        });
+      }
+    });
+
+    socket.on("videoToggled", (data) => {
+      console.log("Video toggled for:", data.userId, "to:", data.isVideoOn);
+      setVideoStates((prev) => new Map(prev).set(data.userId, data.isVideoOn));
     });
 
     socket.on("initialShapes", (initialShapes) => {
@@ -90,17 +203,73 @@ const BoardPage = () => {
     });
 
     return () => {
+      socket.emit("leaveBoard", { boardId, userId: user._id });
       socket.disconnect();
-      socket.off("userJoined");
-      socket.off("initialShapes");
-      socket.off("elementAdded");
-      socket.off("elementUpdated");
-      socket.off("elementDeleted");
-      socket.off("drawingUpdated");
+      peerConnections.current.forEach((connection) => connection.close());
+      if (peer) peer.destroy();
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
     };
   }, [boardId, user._id]);
 
-  // Batch drawing updates
+  const connectToPeer = (peerId) => {
+    if (peerId === user._id || peerConnections.current.has(peerId)) return;
+
+    try {
+      console.log("Calling peer:", peerId);
+      const call = peer.call(peerId, localStreamRef.current);
+      peerConnections.current.set(peerId, call);
+
+      call.on("stream", (remoteStream) => {
+        console.log("Received stream from peer:", peerId);
+        setRemoteStreams((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(peerId, remoteStream);
+          return newMap;
+        });
+      });
+
+      call.on("close", () => {
+        console.log("Call closed with:", peerId);
+        setRemoteStreams((prev) => {
+          const newMap = new Map(prev);
+          newMap.delete(peerId);
+          return newMap;
+        });
+        setVideoStates((prev) => {
+          const newMap = new Map(prev);
+          newMap.delete(peerId);
+          return newMap;
+        });
+        peerConnections.current.delete(peerId);
+      });
+
+      call.on("error", (err) => {
+        console.error("Call error with peer:", peerId, err);
+        peerConnections.current.delete(peerId);
+      });
+    } catch (err) {
+      console.error("Error connecting to peer:", peerId, err);
+    }
+  };
+
+  useEffect(() => {
+    if (!videoContainerRef.current) return;
+    const container = videoContainerRef.current;
+    container.innerHTML = ""; // Clear existing videos
+
+    if (localStreamRef.current) {
+      addVideoStream(user._id, localStreamRef.current, true);
+    }
+
+    remoteStreams.forEach((stream, peerId) => {
+      if (peerId !== user._id) {
+        addVideoStream(peerId, stream, false);
+      }
+    });
+  }, [remoteStreams, videoStates]); // Re-render when video states change
+
   useEffect(() => {
     const interval = setInterval(() => {
       if (batchedPoints.current.length > 0 && currentDrawingId.current) {
@@ -117,6 +286,75 @@ const BoardPage = () => {
 
     return () => clearInterval(interval);
   }, [boardId]);
+
+  const addVideoStream = (id, stream, isLocal = false) => {
+    if (videoContainerRef.current.querySelector(`#video-${id}`)) {
+      console.log(`Video for ${id} already exists, skipping`);
+      return;
+    }
+
+    const videoContainer = document.createElement("div");
+    videoContainer.className = "relative";
+    videoContainer.id = `container-${id}`;
+
+    const isVideoEnabled = videoStates.get(id) ?? true; // Default to true if unknown
+    let element;
+
+    if (isVideoEnabled && stream) {
+      element = document.createElement("video");
+      element.srcObject = stream;
+      element.autoplay = true;
+      element.playsInline = true;
+      element.muted = isLocal;
+    } else {
+      element = document.createElement("div");
+      element.className = "flex items-center justify-center bg-gray-700 text-white";
+      element.textContent = isLocal ? "You" : id; // Use name or avatar here
+    }
+
+    element.id = `video-${id}`;
+    element.className = "w-32 h-24 object-cover rounded-lg shadow-md";
+
+    const label = document.createElement("div");
+    label.className = "absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 text-center";
+    label.textContent = isLocal ? "You" : id;
+
+    videoContainer.appendChild(element);
+    videoContainer.appendChild(label);
+    videoContainerRef.current.appendChild(videoContainer);
+  };
+
+  const toggleVideo = () => {
+    if (localStreamRef.current) {
+      const videoTrack = localStreamRef.current.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+        setIsVideoOn(videoTrack.enabled);
+        setVideoStates((prev) => new Map(prev).set(user._id, videoTrack.enabled));
+        socketRef.current.emit("videoToggled", { boardId, userId: user._id, isVideoOn: videoTrack.enabled });
+        console.log("Video toggled to:", videoTrack.enabled);
+      } else {
+        console.error("No video track available to toggle");
+      }
+    } else {
+      console.error("No local stream available");
+    }
+  };
+
+  const toggleAudio = () => {
+    if (localStreamRef.current) {
+      const audioTrack = localStreamRef.current.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        setIsAudioOn(audioTrack.enabled);
+        console.log("Audio toggled to:", audioTrack.enabled);
+      } else {
+        console.error("No audio track available to toggle");
+      }
+    } else {
+      console.error("No local stream available");
+    }
+  };
 
   const handleMouseDown = (e) => {
     if (tool === "select") {
@@ -237,7 +475,6 @@ const BoardPage = () => {
     }
   };
 
-  // Transformer setup
   useEffect(() => {
     if (selectedId && transformerRef.current) {
       const node = stageRef.current.findOne("#" + selectedId);
@@ -255,15 +492,36 @@ const BoardPage = () => {
         <button className="flex items-center gap-2 px-4 py-2 text-white bg-blue-500 rounded-lg hover:bg-blue-600">
           <FaShareAlt /> Share
         </button>
-        <div>
-          <h1>Board Participants</h1>
-          <ul>
-            {participants.map((participant) => (
-              <li key={participant}>{participant}</li>
-            ))}
-          </ul>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={toggleVideo}
+            className={`p-2 rounded-full ${isVideoOn ? "bg-green-500" : "bg-red-500"} text-white`}
+            title={isVideoOn ? "Turn off video" : "Turn on video"}
+          >
+            {isVideoOn ? <FaVideo /> : <FaVideoSlash />}
+          </button>
+          <button
+            onClick={toggleAudio}
+            className={`p-2 rounded-full ${isAudioOn ? "bg-green-500" : "bg-red-500"} text-white`}
+            title={isAudioOn ? "Mute audio" : "Unmute audio"}
+          >
+            {isAudioOn ? <FaMicrophone /> : <FaMicrophoneSlash />}
+          </button>
+          <div>
+            <h1 className="text-sm font-semibold">Participants ({participants.length})</h1>
+            <ul className="text-xs">
+              {participants.map((p) => (
+                <li key={p}>{p === user._id ? "You" : p}</li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
+
+      <div
+        ref={videoContainerRef}
+        className="flex flex-wrap gap-2 p-2 bg-gray-200 border-b border-gray-300 overflow-auto max-h-32"
+      />
 
       <div className="flex-1 flex justify-center items-center p-4">
         <Stage
@@ -300,7 +558,7 @@ const BoardPage = () => {
             {currentDrawing && (
               <Line
                 id={currentDrawing.id}
-                points={currentDrawing.points || []} // Fallback to empty array if points is undefined
+                points={currentDrawing.points || []}
                 stroke={currentDrawing.stroke}
                 strokeWidth={2}
                 tension={0.5}

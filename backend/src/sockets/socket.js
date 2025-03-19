@@ -16,9 +16,35 @@ export const setupSocket = (io) => {
       try {
         const shapes = await Element.find({ boardId });
         socket.emit("initialShapes", shapes);
+
+        io.to(boardId).emit("userJoined", {
+          userId,
+          boardId,
+          participants: Array.from(userRoomMap.values())
+            .filter((info) => info.boardId === boardId)
+            .map((info) => info.userId)
+        });
       } catch (error) {
         console.error("Error fetching shapes:", error);
       }
+    });
+
+    socket.on("peerConnected", (data) => {
+      const { boardId, userId } = data;
+      console.log(`Peer connected: ${userId} in board: ${boardId}`);
+      io.to(boardId).emit("peerConnected", { userId, boardId });
+    });
+
+    socket.on("videoToggled", (data) => {
+      const { boardId, userId, isVideoOn } = data;
+      console.log(`User ${userId} toggled video to ${isVideoOn} in board ${boardId}`);
+      io.to(boardId).emit("videoToggled", { userId, isVideoOn });
+    });
+
+    socket.on("leaveBoard", (data) => {
+      const { boardId, userId } = data;
+      console.log(`User ${userId} leaving board ${boardId}`);
+      io.to(boardId).emit("userLeft", { userId, boardId });
     });
 
     socket.on("addElement", async (data) => {
@@ -116,6 +142,10 @@ export const setupSocket = (io) => {
       if (userRoomInfo) {
         const { userId, boardId } = userRoomInfo;
         try {
+          // Notify other users about this user leaving
+          io.to(boardId).emit("userLeft", { userId, boardId });
+          
+          // Update the board participants
           const board = await Board.findById(boardId);
           board.participants = board.participants.filter(
             (id) => id.toString() !== userId
@@ -129,6 +159,5 @@ export const setupSocket = (io) => {
       }
     });
   });
-
-  
 };
+
