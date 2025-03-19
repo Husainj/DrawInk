@@ -18,9 +18,12 @@ const BoardPage = () => {
   const [code, setCode] = useState();
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isAudioOn, setIsAudioOn] = useState(true);
-  const [videoStates, setVideoStates] = useState(new Map()); // Track video on/off for all users
+  const [videoStates, setVideoStates] = useState(new Map());
   const isDrawing = useRef(false);
   const isErasing = useRef(false);
+  const [strokeWidth, setStrokeWidth] = useState(2);
+  const [color, setColor] = useState("#FFFFFF"); // Fill color
+  const [stroke, setStroke] = useState("#000000"); // Stroke color
   const stageRef = useRef(null);
   const transformerRef = useRef(null);
   const currentDrawingId = useRef(null);
@@ -54,7 +57,7 @@ const BoardPage = () => {
         });
         localStreamRef.current = stream;
         addVideoStream(user._id, stream, true);
-        setVideoStates((prev) => new Map(prev).set(user._id, true)); // Initial video state
+        setVideoStates((prev) => new Map(prev).set(user._id, true));
 
         const peerInstance = new Peer(generatePeerId(), {
           debug: 3,
@@ -78,15 +81,13 @@ const BoardPage = () => {
           call.answer(localStreamRef.current);
 
           call.on("stream", (remoteStream) => {
-            console.log("Received remote stream :", remoteStream);
+            console.log("Received remote stream:", remoteStream);
             setRemoteStreams((prev) => {
               const newMap = new Map(prev);
               newMap.set(call.peer, remoteStream);
               return newMap;
             });
-            // Assume video is on initially for remote users
             setVideoStates((prev) => new Map(prev).set(call.peer, true));
-            console.log("REMOTE STREAMS : " , remoteStreams)
           });
 
           call.on("close", () => {
@@ -257,7 +258,7 @@ const BoardPage = () => {
   useEffect(() => {
     if (!videoContainerRef.current) return;
     const container = videoContainerRef.current;
-    container.innerHTML = ""; // Clear existing videos
+    container.innerHTML = "";
 
     if (localStreamRef.current) {
       addVideoStream(user._id, localStreamRef.current, true);
@@ -268,7 +269,7 @@ const BoardPage = () => {
         addVideoStream(peerId, stream, false);
       }
     });
-  }, [remoteStreams, videoStates]); // Re-render when video states change
+  }, [remoteStreams, videoStates]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -297,7 +298,7 @@ const BoardPage = () => {
     videoContainer.className = "relative";
     videoContainer.id = `container-${id}`;
 
-    const isVideoEnabled = videoStates.get(id) ?? true; // Default to true if unknown
+    const isVideoEnabled = videoStates.get(id) ?? true;
     let element;
 
     if (isVideoEnabled && stream) {
@@ -309,7 +310,7 @@ const BoardPage = () => {
     } else {
       element = document.createElement("div");
       element.className = "flex items-center justify-center bg-gray-700 text-white";
-      element.textContent = isLocal ? "You" : id; // Use name or avatar here
+      element.textContent = isLocal ? "You" : id;
     }
 
     element.id = `video-${id}`;
@@ -381,7 +382,8 @@ const BoardPage = () => {
       const newShape = {
         type: "pen",
         points: [pos.x, pos.y],
-        stroke: "#2D3748",
+        stroke: stroke, // Use selected stroke color
+        strokeWidth: strokeWidth,
         id: newId,
       };
       batchedPoints.current = [pos.x, pos.y];
@@ -391,7 +393,9 @@ const BoardPage = () => {
       const shapeProps = {
         x: pos.x,
         y: pos.y,
-        fill: "#4299E1",
+        fill: color, // Use selected fill color
+        stroke: stroke, // Use selected stroke color
+        strokeWidth: strokeWidth,
         id: newId,
         draggable: true,
       };
@@ -493,18 +497,10 @@ const BoardPage = () => {
           <FaShareAlt /> Share
         </button>
         <div className="flex items-center gap-4">
-          <button
-            onClick={toggleVideo}
-            className={`p-2 rounded-full ${isVideoOn ? "bg-green-500" : "bg-red-500"} text-white`}
-            title={isVideoOn ? "Turn off video" : "Turn on video"}
-          >
+          <button onClick={toggleVideo} className={`p-2 rounded-full ${isVideoOn ? "bg-green-500" : "bg-red-500"} text-white`}>
             {isVideoOn ? <FaVideo /> : <FaVideoSlash />}
           </button>
-          <button
-            onClick={toggleAudio}
-            className={`p-2 rounded-full ${isAudioOn ? "bg-green-500" : "bg-red-500"} text-white`}
-            title={isAudioOn ? "Mute audio" : "Unmute audio"}
-          >
+          <button onClick={toggleAudio} className={`p-2 rounded-full ${isAudioOn ? "bg-green-500" : "bg-red-500"} text-white`}>
             {isAudioOn ? <FaMicrophone /> : <FaMicrophoneSlash />}
           </button>
           <div>
@@ -518,16 +514,13 @@ const BoardPage = () => {
         </div>
       </div>
 
-      <div
-        ref={videoContainerRef}
-        className="flex flex-wrap gap-2 p-2 bg-gray-200 border-b border-gray-300 overflow-auto max-h-32"
-      />
+      <div ref={videoContainerRef} className="flex flex-wrap gap-2 p-2 bg-gray-200 border-b border-gray-300 overflow-auto max-h-32" />
 
       <div className="flex-1 flex justify-center items-center p-4">
         <Stage
           ref={stageRef}
           width={window.innerWidth - 50}
-          height={window.innerHeight - 160}
+          height={window.innerHeight - 150} // Adjusted height since we removed the extra toolbar
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -545,13 +538,58 @@ const BoardPage = () => {
               };
 
               if (shape.type === "square") {
-                return <Rect key={`${shape.id}-${index}`} {...shapeProps} x={shape.x} y={shape.y} width={shape.width} height={shape.height} fill={shape.fill} />;
+                return (
+                  <Rect
+                    key={`${shape.id}-${index}`}
+                    {...shapeProps}
+                    x={shape.x}
+                    y={shape.y}
+                    width={shape.width}
+                    height={shape.height}
+                    fill={shape.fill}
+                    stroke={shape.stroke}
+                    strokeWidth={shape.strokeWidth}
+                  />
+                );
               } else if (shape.type === "circle") {
-                return <Circle key={`${shape.id}-${index}`} {...shapeProps} x={shape.x} y={shape.y} radius={shape.radius} fill={shape.fill} />;
+                return (
+                  <Circle
+                    key={`${shape.id}-${index}`}
+                    {...shapeProps}
+                    x={shape.x}
+                    y={shape.y}
+                    radius={shape.radius}
+                    fill={shape.fill}
+                    stroke={shape.stroke}
+                    strokeWidth={shape.strokeWidth}
+                  />
+                );
               } else if (shape.type === "triangle") {
-                return <RegularPolygon key={`${shape.id}-${index}`} {...shapeProps} x={shape.x} y={shape.y} sides={3} radius={shape.radius} fill={shape.fill} />;
+                return (
+                  <RegularPolygon
+                    key={`${shape.id}-${index}`}
+                    {...shapeProps}
+                    x={shape.x}
+                    y={shape.y}
+                    sides={3}
+                    radius={shape.radius}
+                    fill={shape.fill}
+                    stroke={shape.stroke}
+                    strokeWidth={shape.strokeWidth}
+                  />
+                );
               } else if (shape.type === "pen" && shape.id !== currentDrawingId.current) {
-                return <Line key={`${shape.id}-${index}`} {...shapeProps} points={shape.points} stroke={shape.stroke} strokeWidth={2} tension={0.5} lineCap="round" />;
+                return (
+                  <Line
+                    key={`${shape.id}-${index}`}
+                    {...shapeProps}
+                    points={shape.points}
+                    stroke={shape.stroke}
+                    strokeWidth={shape.strokeWidth}
+                    tension={0.5}
+                    lineCap="round"
+                  />
+                );
               }
               return null;
             })}
@@ -560,7 +598,7 @@ const BoardPage = () => {
                 id={currentDrawing.id}
                 points={currentDrawing.points || []}
                 stroke={currentDrawing.stroke}
-                strokeWidth={2}
+                strokeWidth={currentDrawing.strokeWidth}
                 tension={0.5}
                 lineCap="round"
               />
@@ -582,7 +620,8 @@ const BoardPage = () => {
         </Stage>
       </div>
 
-      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 flex gap-3 bg-white shadow-lg p-3 rounded-full border border-gray-300">
+      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 flex gap-3 bg-white shadow-lg p-3 rounded-full border border-gray-300 items-center">
+        {/* Tool Buttons */}
         {["select", "square", "circle", "triangle", "pen", "eraser"].map((shape) => (
           <button
             key={shape}
@@ -602,6 +641,44 @@ const BoardPage = () => {
             {shape === "eraser" && <FaEraser size={18} />}
           </button>
         ))}
+
+        {/* Stroke Width Selection */}
+        <div className="flex items-center gap-2 ml-4">
+          <label className="text-sm font-semibold">Width:</label>
+          <select
+            value={strokeWidth}
+            onChange={(e) => setStrokeWidth(Number(e.target.value))}
+            className="p-1 border rounded text-sm"
+          >
+            <option value={1}>1px</option>
+            <option value={2}>2px</option>
+            <option value={4}>4px</option>
+            <option value={6}>6px</option>
+            <option value={8}>8px</option>
+          </select>
+        </div>
+
+        {/* Fill Color Selection */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-semibold">Fill:</label>
+          <input
+            type="color"
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+            className="w-8 h-8 p-0 border-none cursor-pointer rounded"
+          />
+        </div>
+
+        {/* Stroke Color Selection */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-semibold">Stroke:</label>
+          <input
+            type="color"
+            value={stroke}
+            onChange={(e) => setStroke(e.target.value)}
+            className="w-8 h-8 p-0 border-none cursor-pointer rounded"
+          />
+        </div>
       </div>
     </div>
   );

@@ -16,6 +16,7 @@ const elementSchema = new Schema({
     radius: { type: Number }, // For circle and triangle
     points: { type: Array }, // For pen
     stroke: { type: String }, // Color for pen
+    strokeWidth : {type : Number},
     fill: { type: String },
 
 } , {timestamps : true})
