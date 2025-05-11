@@ -18,7 +18,8 @@ const elementSchema = new Schema({
     stroke: { type: String }, // Color for pen
     strokeWidth : {type : Number},
     fill: { type: String },
-
+    text: { type : String},
+    fontSize: {type : Number}
 } , {timestamps : true})
 
 

@@ -1,5 +1,6 @@
 const userRoomMap = new Map();
 const drawingBuffers = new Map(); // Buffer for drawing updates
+
 import { Board } from "../models/board.model.js";
 import { Element } from "../models/elements.model.js";
 
@@ -27,18 +28,6 @@ export const setupSocket = (io) => {
       } catch (error) {
         console.error("Error fetching shapes:", error);
       }
-    });
-
-    socket.on("peerConnected", (data) => {
-      const { boardId, userId } = data;
-      console.log(`Peer connected: ${userId} in board: ${boardId}`);
-      io.to(boardId).emit("peerConnected", { userId, boardId });
-    });
-
-    socket.on("videoToggled", (data) => {
-      const { boardId, userId, isVideoOn } = data;
-      console.log(`User ${userId} toggled video to ${isVideoOn} in board ${boardId}`);
-      io.to(boardId).emit("videoToggled", { userId, isVideoOn });
     });
 
     socket.on("leaveBoard", (data) => {

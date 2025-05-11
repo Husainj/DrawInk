@@ -10,7 +10,7 @@ import elementRouter from "./routes/element.routes.js";
 import http from "http"; // Import http module
 import { Server } from "socket.io"; // Import Socket.IO
 import { setupSocket } from "./sockets/socket.js";
-// import {ExpressPeerServer} from "peer"
+
 const app = express();
 
 // Create HTTP server
@@ -19,12 +19,12 @@ const server = http.createServer(app);
 // Initialize Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: "http://localhost:5173",
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
     allowedHeaders: ["Authorization", "Content-Type"],
   },
-  
+  transports: ["websocket", "polling"],
 });
 
 setupSocket(io);
@@ -33,15 +33,6 @@ app.use((req, res, next) => {
   req.io = io; // Attach io to req
   next();
 });
-
-// const peerServer = ExpressPeerServer(server , {
-//   path: "/peerjs" ,
-
-//   debug: true
-// });
-
-
-
 
 // Existing middleware
 app.use(
@@ -76,7 +67,6 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "50mb" }));
 
 // Routes
-// app.use("/peerjs" , peerServer)
 app.use("/auth", authRouter);
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/boards", boardsRouter);

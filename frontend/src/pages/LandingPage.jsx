@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { FaPaintBrush, FaPenFancy, FaEraser, FaRuler, FaStickyNote, FaPencilAlt } from "react-icons/fa";
-
+import Logo from "../assets/logonew.png"; // Placeholder for logo image
 const LandingPage = () => {
     const googleAuth = () => {
 		window.open(
@@ -58,7 +58,9 @@ const LandingPage = () => {
       </motion.div>
       
       {/* Placeholder for Logo */}
-      <div className="w-16 h-16 bg-gray-300 rounded-lg animate-pulse mb-4 shadow-md"></div>
+      <div className="w-16 h-16 rounded-lg animate-pulse mb-4 ">
+        <img src={Logo} alt="DrawInk" className="w-full h-full object-contain" />
+      </div>
       
       {/* Title */}
       <h1 className="text-5xl font-extrabold text-gray-900 drop-shadow-xl">DrawInk</h1>
