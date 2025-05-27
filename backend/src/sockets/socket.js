@@ -3,19 +3,22 @@ const drawingBuffers = new Map(); // Buffer for drawing updates
 
 import { Board } from "../models/board.model.js";
 import { Element } from "../models/elements.model.js";
-
+import { User } from "../models/user.model.js";
 export const setupSocket = (io) => {
   io.on("connection", (socket) => {
     const userId = socket.handshake.auth.userId;
+ 
     console.log(`User connected: ${userId}`);
 
     socket.on("joinBoard", async (boardId) => {
       socket.join(boardId);
       console.log(`User joined board: ${boardId}`);
+      // const userObj = await User.find(userId)
       userRoomMap.set(socket.id, { userId, boardId });
 
       try {
         const shapes = await Element.find({ boardId });
+      
         socket.emit("initialShapes", shapes);
 
         io.to(boardId).emit("userJoined", {

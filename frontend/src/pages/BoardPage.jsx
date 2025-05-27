@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { Stage, Layer, Rect, Circle, Line, RegularPolygon, Text, Transformer } from "react-konva";
-import { FaSquare, FaCircle, FaPlay, FaPen, FaEraser, FaShareAlt, FaMousePointer, FaVideo, FaVideoSlash, FaMicrophone, FaMicrophoneSlash, FaFont } from "react-icons/fa";
+import { FaSquare, FaCircle, FaPlay, FaPen, FaEraser, FaShareAlt, FaMousePointer, FaFont } from "react-icons/fa";
 import { useParams } from "react-router-dom";
 import api from "../services/api.js";
 import io from "socket.io-client";
 import { useSelector } from "react-redux";
-
 
 const BoardPage = () => {
   const { boardId } = useParams();
@@ -19,16 +18,15 @@ const BoardPage = () => {
   const isDrawing = useRef(false);
   const isErasing = useRef(false);
   const [strokeWidth, setStrokeWidth] = useState(2);
-  const [color, setColor] = useState("#4299E1"); // Fill color
-  const [stroke, setStroke] = useState("#000000"); // Stroke color
+  const [color, setColor] = useState("#4299E1");
+  const [stroke, setStroke] = useState("#000000");
   const stageRef = useRef(null);
   const transformerRef = useRef(null);
   const currentDrawingId = useRef(null);
   const batchedPoints = useRef([]);
   const socketRef = useRef(null);
   const user = useSelector((state) => state.auth.user);
-
-  // State for text input box
+  const [showToast, setShowToast] = useState(false);
   const [textInput, setTextInput] = useState({
     visible: false,
     x: 0,
@@ -37,8 +35,7 @@ const BoardPage = () => {
     id: null,
   });
   const textInputRef = useRef(null);
-  const stageContainerRef = useRef(null); // New ref for stage container
-
+  const stageContainerRef = useRef(null);
   const batchInterval = 500;
 
   useEffect(() => {
@@ -62,8 +59,8 @@ const BoardPage = () => {
     fetchBoardData();
 
     socket.on("userJoined", (data) => {
-      console.log("User joined board:", data.userId);
       setParticipants(data.participants);
+      console.log("Joined participant : " , data.participants)
     });
 
     socket.on("initialShapes", (initialShapes) => {
@@ -110,6 +107,17 @@ const BoardPage = () => {
     };
   }, [boardId, user._id]);
 
+  const handleCopyCode = () => {
+    if (code) {
+      navigator.clipboard.writeText(code).then(() => {
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 2000);
+      }).catch((err) => {
+        console.error("Failed to copy code:", err);
+      });
+    }
+  };
+
   useEffect(() => {
     const interval = setInterval(() => {
       if (batchedPoints.current.length > 0 && currentDrawingId.current) {
@@ -130,10 +138,8 @@ const BoardPage = () => {
   useEffect(() => {
     if (textInput.visible && textInputRef.current) {
       textInputRef.current.focus();
-      console.log("Text input should be visible at:", textInput.x, textInput.y);
     }
   }, [textInput.visible]);
-
 
   const handleMouseDown = (e) => {
     if (tool === "select") {
@@ -154,8 +160,6 @@ const BoardPage = () => {
     const timestamp = Date.now();
     const newId = timestamp.toString();
 
-    console.log("Mouse down at:", pos.x, pos.y, "with tool:", tool);
-
     if (tool === "pen") {
       isDrawing.current = true;
       currentDrawingId.current = newId;
@@ -170,16 +174,17 @@ const BoardPage = () => {
       socketRef.current.emit("addElement", { boardId, newShape });
       setCurrentDrawing(newShape);
     } else if (tool === "text") {
-      console.log("Showing text input at:", pos.x, pos.y);
-      
-      // Get the stage container position
-      const stageContainer = stageContainerRef.current;
-      const containerRect = stageContainer.getBoundingClientRect();
-      
+      const stage = stageRef.current;
+      const stageRect = stage.container().getBoundingClientRect();
+      const containerRect = stageContainerRef.current.getBoundingClientRect();
+      const stageLeft = stageRect.left - containerRect.left;
+      const stageTop = stageRect.top - containerRect.top;
+      const inputX = stageLeft + pos.x;
+      const inputY = stageTop + pos.y;
       setTextInput({
         visible: true,
-        x: pos.x + containerRect.left,
-        y: pos.y + containerRect.top,
+        x: inputX,
+        y: inputY,
         value: "",
         id: newId,
       });
@@ -277,10 +282,14 @@ const BoardPage = () => {
 
   const handleTextSubmit = (e) => {
     if (e.key === "Enter" && textInput.value.trim()) {
+      const stage = stageRef.current;
+      const stageRect = stage.container().getBoundingClientRect();
+      const shapeX = textInput.x - stageRect.left;
+      const shapeY = textInput.y - stageRect.top;
       const newShape = {
         type: "text",
-        x: textInput.x - stageContainerRef.current.getBoundingClientRect().left,
-        y: textInput.y - stageContainerRef.current.getBoundingClientRect().top,
+        x: shapeX,
+        y: shapeY,
         text: textInput.value.trim(),
         fontSize: 20,
         fill: color,
@@ -299,10 +308,14 @@ const BoardPage = () => {
 
   const handleTextBlur = () => {
     if (textInput.value.trim()) {
+      const stage = stageRef.current;
+      const stageRect = stage.container().getBoundingClientRect();
+      const shapeX = textInput.x - stageRect.left;
+      const shapeY = textInput.y - stageRect.top;
       const newShape = {
         type: "text",
-        x: textInput.x - stageContainerRef.current.getBoundingClientRect().left,
-        y: textInput.y - stageContainerRef.current.getBoundingClientRect().top,
+        x: shapeX,
+        y: shapeY,
         text: textInput.value.trim(),
         fontSize: 20,
         fill: color,
@@ -328,34 +341,40 @@ const BoardPage = () => {
   }, [selectedId]);
 
   return (
-    <div className="w-full h-screen flex flex-col bg-gray-100">
-      <div className="flex justify-between items-center px-6 py-3 bg-white shadow-md">
-        <span className="text-gray-700 font-semibold">Board Code: {code}</span>
-        <button className="flex items-center gap-2 px-4 py-2 text-white bg-blue-500 rounded-lg hover:bg-blue-600">
-          <FaShareAlt /> Share
+    <div className="w-full h-screen flex flex-col bg-gray-50">
+      <div className="flex justify-between items-center px-6 py-4 bg-white shadow-lg">
+        <span className="text-lg font-semibold text-gray-800">Board Code: {code}</span>
+        <button  onClick={handleCopyCode} className="flex items-center gap-2 px-5 py-2.5 text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all duration-200">
+          <FaShareAlt /> Share Board
         </button>
-        <div className="flex items-center gap-4">
-          <div>
-            <h1 className="text-sm font-semibold">Participants ({participants.length})</h1>
-            <ul className="text-xs">
-              {participants.map((p) => (
-                <li key={p}>{p === user._id ? "You" : p}</li>
-              ))}
-            </ul>
+        <div className="flex items-center gap-6">
+          <div className="relative group">
+            <h1 className="text-sm font-semibold text-gray-800">Participants ({participants.length})</h1>
+            <div className="absolute hidden group-hover:block bg-white shadow-md rounded-lg p-3 mt-2 z-10">
+              <ul className="text-sm text-gray-600">
+                {participants.map((p) => (
+                  <li key={p} className="py-1">{p === user._id ? "You" : p}</li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
       </div>
-
-      <div className="flex-1 flex justify-center items-center p-4 relative" ref={stageContainerRef}>
+      {showToast && (
+            <div className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg transition-all duration-200">
+              Code copied to clipboard!
+            </div>
+          )}
+      <div className="flex-1 flex justify-center items-center p-6 relative" ref={stageContainerRef}>
         <Stage
           ref={stageRef}
-          width={window.innerWidth - 50}
-          height={window.innerHeight - 150}
+          width={window.innerWidth - 80}
+          height={window.innerHeight - 180}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
-          className="bg-white shadow-lg rounded-lg border border-gray-300"
+          className="bg-white shadow-xl rounded-xl border border-gray-200"
         >
           <Layer>
             {shapes.map((shape, index) => {
@@ -463,7 +482,6 @@ const BoardPage = () => {
           </Layer>
         </Stage>
 
-        {/* Text Input Box */}
         {textInput.visible && (
           <input
             ref={textInputRef}
@@ -472,48 +490,54 @@ const BoardPage = () => {
             onChange={(e) => setTextInput((prev) => ({ ...prev, value: e.target.value }))}
             onKeyDown={handleTextSubmit}
             onBlur={handleTextBlur}
-            className="absolute p-1 border rounded shadow-md bg-white"
+            className="absolute p-2 border border-gray-300 rounded-lg shadow-md bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
             style={{
               left: `${textInput.x}px`,
               top: `${textInput.y}px`,
-              zIndex: 10,
+              zIndex: 1000,
+              width: '250px',
+              fontSize: '16px',
             }}
-            placeholder="Type here..."
+            placeholder="Type your text..."
             autoFocus
           />
         )}
       </div>
 
-      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 flex gap-3 bg-white shadow-lg p-3 rounded-full border border-gray-300 items-center">
-        {/* Tool Buttons */}
-        {["select", "square", "circle", "triangle", "pen", "text", "eraser"].map((shape) => (
-          <button
-            key={shape}
-            className={`flex items-center justify-center w-10 h-10 rounded-full border transition ${
-              tool === shape ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-700 hover:bg-gray-200"
-            }`}
-            onClick={() => {
-              setTool(shape);
-              if (shape !== "select") setSelectedId(null);
-            }}
-          >
-            {shape === "select" && <FaMousePointer size={18} />}
-            {shape === "square" && <FaSquare size={18} />}
-            {shape === "circle" && <FaCircle size={18} />}
-            {shape === "triangle" && <FaPlay size={18} />}
-            {shape === "pen" && <FaPen size={18} />}
-            {shape === "text" && <FaFont size={18} />}
-            {shape === "eraser" && <FaEraser size={18} />}
-          </button>
-        ))}
+      <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 flex gap-4 bg-white shadow-2xl p-4 rounded-full border border-gray-200 items-center">
+        {[
+          { name: "select", icon: <FaMousePointer size={20} />, tooltip: "Select Tool" },
+          { name: "square", icon: <FaSquare size={20} />, tooltip: "Square Tool" },
+          { name: "circle", icon: <FaCircle size={20} />, tooltip: "Circle Tool" },
+          { name: "triangle", icon: <FaPlay size={20} />, tooltip: "Triangle Tool" },
+          { name: "pen", icon: <FaPen size={20} />, tooltip: "Pen Tool" },
+          { name: "text", icon: <FaFont size={20} />, tooltip: "Text Tool" },
+          { name: "eraser", icon: <FaEraser size={20} />, tooltip: "Eraser Tool" },
+        ].map((item) => (
+          <div key={item.name} className="relative group">
+            <button
+              className={`flex items-center justify-center w-12 h-12 rounded-full border transition-all duration-200 ${
+                tool === item.name ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 hover:bg-gray-100 border-gray-300"
+              }`}
+              onClick={() => {
+                setTool(item.name);
+                if (item.name !== "select") setSelectedId(null);
+              }}
+            >
+              {item.icon}
+            </button>
+            <span className="absolute bottom-14 bg-gray-800 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              {item.tooltip}
+            </span>
+          </div>
+        )) }
 
-        {/* Stroke Width Selection */}
-        <div className="flex items-center gap-2 ml-4">
-          <label className="text-sm font-semibold">Width:</label>
+        <div className="flex items-center gap-4 ml-6">
+          <label className="text-sm font-semibold text-gray-800">Width:</label>
           <select
             value={strokeWidth}
             onChange={(e) => setStrokeWidth(Number(e.target.value))}
-            className="p-1 border rounded text-sm"
+            className="p-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value={1}>1px</option>
             <option value={2}>2px</option>
@@ -523,25 +547,23 @@ const BoardPage = () => {
           </select>
         </div>
 
-        {/* Fill Color Selection */}
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-semibold">Fill:</label>
+        <div className="flex items-center gap-4">
+          <label className="text-sm font-semibold text-gray-800">Fill Color:</label>
           <input
             type="color"
             value={color}
             onChange={(e) => setColor(e.target.value)}
-            className="w-8 h-8 p-0 border-none cursor-pointer rounded"
+            className="w-10 h-10 p-1 border-2 border-gray-200 rounded-full cursor-pointer hover:border-blue-500 transition-all duration-200"
           />
         </div>
 
-        {/* Stroke Color Selection */}
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-semibold">Stroke:</label>
+        <div className="flex items-center gap-4">
+          <label className="text-sm font-semibold text-gray-800">Stroke Color:</label>
           <input
             type="color"
             value={stroke}
             onChange={(e) => setStroke(e.target.value)}
-            className="w-8 h-8 p-0 border-none cursor-pointer rounded"
+            className="w-10 h-10 p-1 border-2 border-gray-200 rounded-full cursor-pointer hover:border-blue-500 transition-all duration-200"
           />
         </div>
       </div>
