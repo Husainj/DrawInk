@@ -19,7 +19,7 @@ const server = http.createServer(app);
 // Initialize Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
     allowedHeaders: ["Authorization", "Content-Type"],
@@ -37,7 +37,7 @@ app.use((req, res, next) => {
 // Existing middleware
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE"],
   })
@@ -45,11 +45,11 @@ app.use(
 
 app.use(
   session({
-    secret: "husain", // Change this to a strong secret key
+    secret: process.env.SESSION_SECRET || "husain",
     resave: false,
     saveUninitialized: true,
     cookie: {
-      secure: false, // Set to `true` in production with HTTPS
+      secure: process.env.NODE_ENV === "production",
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
     },
   })
