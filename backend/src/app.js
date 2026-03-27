@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import session from "express-session";
+import MongoStore from "connect-mongo";
 import passport from "passport";
 import "./passport.js";
 import authRouter from "./routes/auth.routes.js";
@@ -12,6 +13,9 @@ import { Server } from "socket.io"; // Import Socket.IO
 import { setupSocket } from "./sockets/socket.js";
 
 const app = express();
+
+// Trust Render's reverse proxy so secure cookies work over HTTPS
+app.set("trust proxy", 1);
 
 // Create HTTP server
 const server = http.createServer(app);
@@ -47,9 +51,11 @@ app.use(
   session({
     secret: process.env.SESSION_SECRET || "husain",
     resave: false,
-    saveUninitialized: true,
+    saveUninitialized: false,
+    store: MongoStore.create({ mongoUrl: process.env.MONGODB_URI }),
     cookie: {
       secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
     },
   })
