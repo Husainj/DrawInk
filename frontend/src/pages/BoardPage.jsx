@@ -39,8 +39,9 @@ const BoardPage = () => {
   const batchInterval = 500;
 
   useEffect(() => {
-    socketRef.current = io("http://localhost:8000", {
+    socketRef.current = io(import.meta.env.VITE_BACKEND_URL, {
       auth: { userId: user._id },
+      withCredentials: true,
     });
 
     const socket = socketRef.current;

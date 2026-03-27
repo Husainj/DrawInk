@@ -1,10 +1,29 @@
-const userRoomMap = new Map();
-const drawingBuffers = new Map(); // Buffer for drawing updates
-
 import { Board } from "../models/board.model.js";
 import { Element } from "../models/elements.model.js";
 import { User } from "../models/user.model.js";
+
+const userRoomMap = new Map();
+const drawingBuffers = new Map(); // Buffer for drawing updates
+
 export const setupSocket = (io) => {
+  // Single interval for the whole server, not per-connection
+  setInterval(async () => {
+    for (const [drawingId, { points, boardId, isComplete }] of drawingBuffers) {
+      if (!isComplete) {
+        try {
+          await Element.findOneAndUpdate(
+            { boardId, id: drawingId },
+            { points },
+            { new: true }
+          );
+          console.log(`Saved in-progress drawing ${drawingId} to database`);
+        } catch (error) {
+          console.error("Error saving drawing to DB:", error);
+        }
+      }
+    }
+  }, 5000);
+
   io.on("connection", (socket) => {
     const userId = socket.handshake.auth.userId;
  
@@ -110,24 +129,6 @@ export const setupSocket = (io) => {
       }
     });
     
-    // Periodic save with better cleanup
-    setInterval(async () => {
-      for (const [drawingId, { points, boardId, isComplete }] of drawingBuffers) {
-        if (!isComplete) {
-          try {
-            await Element.findOneAndUpdate(
-              { boardId, id: drawingId },
-              { points },
-              { new: true }
-            );
-            console.log(`Saved in-progress drawing ${drawingId} to database`);
-          } catch (error) {
-            console.error("Error saving drawing to DB:", error);
-          }
-        }
-      }
-    }, 5000);
-
     socket.on("disconnect", async () => {
       console.log(`User disconnected: ${socket.id}`);
       const userRoomInfo = userRoomMap.get(socket.id);
